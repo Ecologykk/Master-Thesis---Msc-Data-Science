@@ -1,14 +1,13 @@
 # Master Thesis - MSc Data Science
 
-**Can LLMs predict court cases and detect error patterns in decisions?**
+**Can LLMs predict court cases decisions?**
 
 This repository contains the code and data for a Master's thesis in Data Science focused on applying Large Language Models (LLMs) to Portuguese legal document analysis.
 
 ## 🎯 Research Objectives
 
-1. **Outcome Prediction**: Can LLMs predict court case outcomes based on judgment text?
-2. **Error Detection**: Can LLMs identify error patterns in judicial decisions?
-3. **Decision Extraction**: Develop robust algorithms to separate final decisions from judgment text to prevent data leakage
+1. **Outcome Prediction**: Can LLMs predict and justify court case outcomes based on judgment text?
+
 
 ## 📁 Project Structure
 
@@ -38,9 +37,13 @@ Master-Thesis---Msc-Data-Science/
 
 ### What's Not Started
 ⏳ Data preprocessing and cleaning  
+⏳ Data Exploration
+⏳ ML/DL baseline modelling
 ⏳ LLM model training and evaluation  
-⏳ Error pattern detection analysis  
+⏳ LLM improvement with RAG - (if possible)
 ⏳ Comparative analysis between case types
+⏳ Legal experts validation
+
 
 ## 🚀 Quick Start
 
@@ -114,8 +117,8 @@ Follow the interactive prompts to:
 
 ## 👤 Author
 
-**Master's Student in Data Science**  
-Universidade de Lisboa - Faculdade de Ciências (LASIGE)  
+**Helton Mendonça**
+Master's Student in Data Science @ Universidade de Lisboa - Faculdade de Ciências (LASIGE)  
 Thesis: Comparing LLM performance on ethically charged vs. documental legal cases
 
 ## 🙏 Acknowledgments
