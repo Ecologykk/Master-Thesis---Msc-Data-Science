@@ -1,0 +1,32 @@
+# Tests folder
+tests/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+tese_mestrado_venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Exclude everything at root except specific folders and files
+/*
+!src/
+!data/
+!README.md
+!.gitignore
