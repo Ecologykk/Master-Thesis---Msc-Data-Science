@@ -1,5 +1,5 @@
 # Tests folder
-tests/
+tests/*
 
 # Python cache
 __pycache__/
@@ -26,6 +26,7 @@ Thumbs.db
 
 # Exclude everything at root except specific folders and files
 /*
+!writing/
 !src/
 !data/
 !README.md
