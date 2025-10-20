@@ -1,0 +1,9 @@
+[0] Config.pm:328> INFO - This is Biber 2.21
+[0] Config.pm:331> INFO - Logfile is 'main.blg'
+[174] biber-MSWIN64:342> INFO - === 
+[243] Biber.pm:421> INFO - Reading 'main.bcf'
+[411] Biber.pm:1002> INFO - Found 40 citekeys in bib section 0
+[432] Biber.pm:4487> INFO - Processing section 0
+[451] Biber.pm:4678> INFO - Looking for bibtex file 'tese.bib' for section 0
+[855] Utils.pm:479> ERROR - Cannot find 'tese.bib'!
+[855] Biber.pm:137> INFO - ERRORS: 1
