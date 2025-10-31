@@ -33,7 +33,8 @@ class ContractBreachScraper:
     def __init__(self):
         """Initialize the scraper with peace court URLs."""
         self.court_urls = {
-            "JP": "https://www.dgsi.pt/jpaz.nsf/Pesquisa+Descritor?OpenForm" # JP - Julgados de Paz - Courts of Peace. Note: If you press this link it won't work, but trough the script it will. I don't know why.
+            "JP": "https://www.dgsi.pt/jpaz.nsf/Pesquisa+Descritor?OpenForm", # JP - Julgados de Paz - Courts of Peace. Note: If you press this link it won't work, but trough the script it will. I don't know why.
+            "CSM": "https://jurisprudencia.csm.org.pt/" # CSM - Conselho Superior da Magistratura - Superior Council of the Magistracy
         }
     
     async def scrape_judgment(self, url, court_name="JP", case_type="INCUMPRIMENTO DE CONTRATOS"):
@@ -83,10 +84,11 @@ class ContractBreachScraper:
             "tipo_direito": "CÍVEL",
             "tipo_caso": case_type,
             "n_processo": None,
-            "juiz": None,
-            "data_sentenca": None,
+            "juiz_relator": None,
+            "data_acordao": None,
             "descritores": [],
-            "area": None,
+            "votacao": None,
+            "meio_processual": None,
             "decisao": None,
             "sumario": None,
             "texto_integral_disponivel": None,
@@ -102,17 +104,40 @@ class ContractBreachScraper:
         # Extract basic fields - Peace Courts use different field names
         patterns = {
             "n_processo": r"Processo:\s*([^\n]+)",
-            "juiz": r"Ju[ií]z\s+de\s+Paz:\s*([^\n]+)",
-            "data_sentenca": r"Data\s+da\s+Senten[çc]a:\s*(\d{2}-\d{2}-\d{4})",
-            "area": r"[ÁA]rea:\s*([^\n]+)",
+            "juiz_relator": r"Relator:\s*([^\n]+)",
+            "data_sentenca": r"Data\s+da\s+Senten[çc]a:\s*(\d{2}-\d{2}-\d{4})",  # JP only
+            "data_acordao": r"Data\s+do\s+Ac[oó]rd[ãa]o:\s*(\d{2}-\d{2}-\d{4})",  # DGSI/CSM
             "decisao": r"Decis[ãa]o:\s*([^\n]+)",
-            "texto_integral_disponivel": r"Texto Integral:\s*([SN])",
+            "texto_integral_disponivel": r"Texto Integral:\s*([SN])"
         }
-        
+
         for key, pattern in patterns.items():
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 metadata[key] = match.group(1).strip()
+        
+        # Normalize date field: JP uses "Data da sentença", DGSI/CSM use "Data do Acordão"
+        # Always store in "data_acordao" field for consistency
+        if "data_sentenca" in metadata and metadata["data_sentenca"]:
+            metadata["data_acordao"] = metadata.pop("data_sentenca")
+        elif metadata["data_acordao"] is None:
+            # Try to find any date pattern as fallback
+            date_fallback = re.search(r"Data[^:]*:\s*(\d{2}-\d{2}-\d{4})", text, re.IGNORECASE)
+            if date_fallback:
+                metadata["data_acordao"] = date_fallback.group(1).strip()
+
+        # Extract tribunal with locality (separate handling for proper formatting)
+        tribunal_pattern = r'Julgado\s+de\s+Paz\s+de\s*:?\s*([A-ZÀÁÂÃÇÉÊÍÓÔÕÚ][A-ZÀÁÂÃÇÉÊÍÓÔÕÚ\s\-]+)'
+        tribunal_match = re.search(tribunal_pattern, text, re.IGNORECASE)
+
+        if tribunal_match:
+            localidade = tribunal_match.group(1).strip()
+            # Clean up extra whitespace and format as JP_LOCALITY
+            localidade_clean = re.sub(r'\s+', '_', localidade.upper())
+            metadata["tribunal"] = f"JP_{localidade_clean}"
+        else:
+            # Fallback: keep generic JP if locality not found
+            metadata["tribunal"] = court_name  # Will be "JP"
         
         # Extract descriptors
         metadata["descritores"] = self._extract_descriptors(text)
