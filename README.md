@@ -8,49 +8,96 @@ This repository contains the code and data for a Master's thesis in Data Science
 
 1. **Outcome Prediction**: Can LLMs predict and justify court case outcomes based on judgment text?
 
-
 ## 📁 Project Structure
 
 ```
 Master-Thesis---Msc-Data-Science/
 ├── src/
 │   └── scrapers/                    # Legal document scrapers
-│       ├── domestic_violence_scraper.py
-│       ├── contract_breach_scraper.py
-│       ├── main.py                  # Interactive CLI
-│       ├── README.md                # Detailed documentation
-│       ├── orchestration_explained.md   # Main.py deep-dive
-│       └── scrapers_explained.md        # Scraper algorithms deep-dive
-│
-├── data/                            # Scraped documents (JSON)
-│
+│   └── data_processing_exploration/ # Data cleaning, processing, EDA
+│       ├── processing_tests.ipynb
+│       └── processing_auxiliary/
+│           ├── fix_csm.json.py
+│           ├── fix_csm_text.py
+│           ├── fix_ic_json.py
+│           └── pron_cases_solve.py
+├                           
+│   
+│       
+│       
+│   
 └── README.md                        # This file
 ```
 
-## 🚀 Current Status: Data Collection Phase
+## 🚦 Data Processing & EDA Status
 
-### What's Working
-✅ **Domestic Violence Scraper**: Collecting cases from Courts of Appeal (TRE, TRL, TRC, TRG, TRP) and Supreme Court (STJ)  
-✅ **Contract Breach Scraper**: Collecting cases from Peace Courts (JP)  
-✅ **Decision Extraction Algorithm**: 15-layer cascade to separate final decisions from judgment text (prevents data leakage)  
-✅ **Interactive CLI**: User-friendly terminal interface for scraping
+### Data Scale & Integrity
 
-### What's Not Started
-⏳ Data preprocessing and cleaning  
-⏳ Data Exploration
-⏳ ML/DL baseline modelling
-⏳ LLM model training and evaluation  
-⏳ LLM improvement with RAG - (if possible)
-⏳ Comparative analysis between case types
-⏳ Legal experts validation
+- **Total scraped:** 6,627 documents (4,368 contract breach, 2,258 domestic violence)
+- **Post-cleaning:** 1,938 usable contract breach cases (after dropping incomplete, duplicates, unusable)
+- **Integrity filtering:**
+  - ~44% of contract breach cases lacked full text (expected for DGSI)
+  - ~5.5% had full text but missing decision (237 problematic cases, dropped). 4.4% for domestic violence corpus (equivalant to 99 cases, all dropped)
+  - Final dataset: robust subset where `texto_integral` and `decisao` coexist
 
+### Decision Extraction & Label Harmonization
+
+- **Extraction:** Initial regex caught majority of decisions; manual-assist function built but skipped (marginal gain, high cost in time)
+- **Summary creation:** Regex pattern mining from verbose texts; missing summaries filled intelligently, preserving metadata
+- **Label mapping:** Collapsed legal expressions into interpretable ML labels
+
+#### For Contract Breach:
+
+| Setup      | Favorable | Unfavorable | Partial | Notes                |
+|------------|-----------|-------------|---------|----------------------|
+| Binary     | 54%       | 46%         | -       | Balanced for ML      |
+| Ternary    | 36%       | 43%         | 21%     | Slight imbalance     |
+
+#### For Domestic Violence:
+
+| Setup      | Favorable | Unfavorable | Partial | Notes                |
+|------------|-----------|-------------|---------|----------------------|
+| Binary     | 80%       | 20%         | -       | Imbalanced for ML    |
+| Ternary    | 63%       | 14%         | 23%     | Slight imbalance     |
+
+- **Legal logic:** Linguistic/procedural mapping matches appellate reasoning:
+  - Favorable: *(Recurso)* Provido or Procedente, *(Sentença Anterior)* Revogada
+  - Unfavorable: *(Recurso)* Improcedente or Negado Provimento, *(Sentença Anterior)* Confirmada
+  - Partial: Parcialmente + action term
+
+### EDA Highlights
+
+- **Basic stats:** Distribution of dates, text length, word/sentence counts, length per class, class distribution, n-gram frequency per class (stopwords removed)
+- **Descriptors:** Frequency analysis outside main ones (e.g., 'VIOLÊNCIA DOMÉSTICA', 'INCUMPRIMENTO DO/DE CONTRATO/CONTRATUAL')
+- **Judge gender:** Names mapped to gender (male, female, non-descriptive); class distribution by gender
+- **Tribunal:** Class distribution by court
+- **Sentiment analysis:** Compared emotional tone between domestic violence and contract breach cases
+- **Readability:** Flesch Reading Ease scores compared between case types
+
+### Results Summary
+
+| Step                | Contract Breach (IC) | Domestic Violence (DV) | Notes                                  |
+|---------------------|---------------------|------------------------|----------------------------------------|
+| Scraped             | 4,368               | 2,258                  |                                        |
+| Usable (final)      | 1,938               | 2,258                  | DV had 100% full texts; IC ~44% missing|
+| Dropped (no decision)| 5.46%              | 4.41%                  |                                        |
+| Label Distribution  | See above           | See above              | Binary & ternary setups                |
+| Readability         | Compared            | Compared               | ARI and Coleman Liau Scores adapted to Portuguese (both hard to read)                       |
+| Sentiment           | Compared            | Compared               |   Both have negative sentiment. Domestic Violence more sentimental though                                    |
+| Judge Gender        | Mapped              | Mapped                 |   No gender bias found                                     |
+| Tribunal            | Analyzed            | Analyzed               |     No major tribunal bias found                                   |
+
+**Summary:**  
+- Data cleaning and integrity filtering produced a high-quality, robust dataset for ML.
+- Decision extraction and label harmonization followed legal logic and practical judicial analytics.
+- EDA covered statistical, linguistic, and legal dimensions, supporting downstream modeling.
 
 ## 🚀 Quick Start
 
 ### 1. Install Dependencies
 
 ```bash
-pip install beautifulsoup4 crawl4ai  selenium
+pip install beautifulsoup4 crawl4ai selenium
 ```
 
 ### 2. Run Scrapers
@@ -82,10 +129,10 @@ Follow the interactive prompts to:
 
 ## 📊 Data Collected So Far
 
-| Case Type | Source | Courts | Documents |
-|-----------|--------|--------|-----------|
-| **Domestic Violence** | Courts of Appeal | TRE, TRL, TRC, TRG, TRP, STJ | Thousands |
-| **Contract Breach** | Peace Courts | Various JP | Hundreds |
+| Case Type           | Source             | Courts                        | Documents |
+|---------------------|--------------------|-------------------------------|-----------|
+| Domestic Violence   | Courts of Appeal   | TRE, TRL, TRC, TRG, TRP, STJ  | Thousands |
+| Contract Breach     | Peace Courts       | Various JP                    | Thousands  |
 
 ## � Output Schema
 
@@ -126,5 +173,5 @@ Thesis: Comparing LLM performance on ethically charged vs. documental legal case
 
 ---
 
-**Status**: � Data Collection Phase  
-**Last Updated**: October 2025
+**Status**: � Data Collection & Processing Phase  
+**Last Updated**: November 2025
