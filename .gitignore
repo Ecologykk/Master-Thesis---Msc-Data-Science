@@ -24,6 +24,9 @@ ENV/
 .DS_Store
 Thumbs.db
 
+#data files
+data/* 
+
 # Exclude everything at root except specific folders and files
 /*
 !writing/
