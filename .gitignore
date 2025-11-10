@@ -27,6 +27,9 @@ Thumbs.db
 #data files
 data/* 
 
+#vizualization outputs
+eda_viz/*
+
 # Exclude everything at root except specific folders and files
 /*
 !writing/

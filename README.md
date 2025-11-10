@@ -58,7 +58,7 @@ Master-Thesis---Msc-Data-Science/
 | Setup      | Favorable | Unfavorable | Partial | Notes                |
 |------------|-----------|-------------|---------|----------------------|
 | Binary     | 80%       | 20%         | -       | Imbalanced for ML    |
-| Ternary    | 63%       | 14%         | 23%     | Slight imbalance     |
+| Ternary    | 63%       | 14%         | 23%     | Imbalanced imbalance     |
 
 - **Legal logic:** Linguistic/procedural mapping matches appellate reasoning:
   - Favorable: *(Recurso)* Provido or Procedente, *(Sentença Anterior)* Revogada
@@ -79,13 +79,13 @@ Master-Thesis---Msc-Data-Science/
 | Step                | Contract Breach (IC) | Domestic Violence (DV) | Notes                                  |
 |---------------------|---------------------|------------------------|----------------------------------------|
 | Scraped             | 4,368               | 2,258                  |                                        |
-| Usable (final)      | 1,938               | 2,258                  | DV had 100% full texts; IC ~44% missing|
-| Dropped (no decision)| 5.46%              | 4.41%                  |                                        |
+| Usable (final)      | 1,874               | 1,138                  | DV had 100% full texts; IC ~44% missing|
+| Dropped (no decision,with full text)| 5.46%              | 4.41%                  |                                        |
 | Label Distribution  | See above           | See above              | Binary & ternary setups                |
 | Readability         | Compared            | Compared               | ARI and Coleman Liau Scores adapted to Portuguese (both hard to read)                       |
 | Sentiment           | Compared            | Compared               |   Both have negative sentiment. Domestic Violence more sentimental though                                    |
 | Judge Gender        | Mapped              | Mapped                 |   No gender bias found                                     |
-| Tribunal            | Analyzed            | Analyzed               |     No major tribunal bias found                                   |
+| Tribunal            | Analyzed            | Analyzed               |     No major tribunal bias, but further research could find interesting patterns                              |
 
 **Summary:**  
 - Data cleaning and integrity filtering produced a high-quality, robust dataset for ML.
