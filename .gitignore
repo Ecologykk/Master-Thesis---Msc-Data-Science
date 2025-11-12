@@ -34,8 +34,8 @@ eda_viz/*
 /*
 !writing/
 !src/
-!src/data_processing_exploration/
-!src/data_processing_exploration/processing_tests.ipynb
-!src/data_processing_exploration/processing_auxiliary/
+# !src/data_processing_exploration/
+# !src/data_processing_exploration/processing_tests.ipynb
+# !src/data_processing_exploration/processing_auxiliary/
 !README.md
 !.gitignore
