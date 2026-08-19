@@ -1,0 +1,3 @@
+https://www.dgsi.pt/jtrp.nsf/56a6e7121657f91e80257cda00381fdf/40af6048c984e6b580258132003df0ca?OpenDocument - Motivo: IndexError('no such group')
+https://www.dgsi.pt/jtrp.nsf/56a6e7121657f91e80257cda00381fdf/f307ff8d26a5deee80258a1d00566b51?OpenDocument - Motivo: IndexError('no such group')
+https://www.dgsi.pt/jtrp.nsf/56a6e7121657f91e80257cda00381fdf/29ba3729852df4ba802589660038e346?OpenDocument - Motivo: IndexError('no such group')

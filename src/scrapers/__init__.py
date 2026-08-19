@@ -19,5 +19,5 @@ Date: October 13th 2025
 from .domestic_violence_scraper import DomesticViolenceScraper
 from .contract_breach_scraper import ContractBreachScraper
 
-__all__ = ['DomesticViolenceScraper', 'ContractBreachScraper']
-__version__ = '1.0.0'
+__all__ = ["DomesticViolenceScraper", "ContractBreachScraper"]
+__version__ = "1.0.0"

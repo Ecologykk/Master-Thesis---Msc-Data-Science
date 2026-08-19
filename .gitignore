@@ -1,6 +1,3 @@
-# Tests folder
-tests/*
-
 # Python cache
 __pycache__/
 *.pyc
@@ -24,18 +21,54 @@ ENV/
 .DS_Store
 Thumbs.db
 
-#data files
-data/* 
+# Logs
+*.log
 
-#vizualization outputs
-eda_viz/*
+# Data (keep small artifacts only)
+data/raw_data/
+data/processed_data/*
+!data/processed_data/gold_test/
+data/results/*
+!data/results/evaluation_results_with_cis.parquet
 
-# Exclude everything at root except specific folders and files
-/*
-!writing/
-!src/
-# !src/data_processing_exploration/
-# !src/data_processing_exploration/processing_tests.ipynb
-# !src/data_processing_exploration/processing_auxiliary/
-!README.md
-!.gitignore
+# Visualization outputs
+eda_viz/
+
+# Streamlit secrets
+**/.streamlit/secrets.toml
+
+# Credentials
+**/credentials/
+
+# Jupyter notebooks in data processing (keep others)
+src/data_processing_exploration/*.ipynb
+
+# FastText models (large)
+fasttext_pt/
+
+# SHAP explanations (large)
+shap_explanations/
+
+# Theory plots
+theory_plots_folder/
+plots_for_theory.ipynb
+
+
+#Sentilex 
+SentiLex-PT02/
+
+#AI Harness
+.claude/
+#No workflows involved in this project.
+.github/ 
+
+
+#Data for the project (temporary for now will  reacess later this folder later)
+data/
+
+# Pyproject TOML file
+pyproject.toml
+
+
+
+
