@@ -30,6 +30,10 @@ data/processed_data/*
 !data/processed_data/gold_test/
 data/results/*
 !data/results/evaluation_results_with_cis.parquet
+!data/results/forest_plots/
+!data/results/predictions/
+data/models/
+data/failed_urls.txt
 
 # Visualization outputs
 eda_viz/
@@ -38,7 +42,7 @@ eda_viz/
 **/.streamlit/secrets.toml
 
 # Credentials
-**/credentials/
+**/credentials/*
 
 # Jupyter notebooks in data processing (keep others)
 src/data_processing_exploration/*.ipynb
@@ -61,14 +65,5 @@ SentiLex-PT02/
 .claude/
 #No workflows involved in this project.
 .github/ 
-
-
-#Data for the project (temporary for now will  reacess later this folder later)
-data/
-
-# Pyproject TOML file
-pyproject.toml
-
-
 
 

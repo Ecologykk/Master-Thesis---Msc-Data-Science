@@ -1,6 +1,4 @@
-"""
-SHAP-based Explainability Module
-=================================
+"""SHAP-based explainability module for Legal Judgment Prediction models.
 
 Generates sentence-level SHAP explanations for Legal Judgment Prediction models.
 
@@ -49,7 +47,6 @@ Label encoding (must match classification.py):
 from __future__ import annotations
 
 import json
-import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -109,56 +106,245 @@ SENTENCE_TOKENIZER_PATTERN: str = r"(?<=[.!?;:])\s+"
 # with good coverage.  Use 200 for large batch exports to keep wall time low.
 DEFAULT_MAX_EVALS: int = 500
 
+# Default budget for the LLM CLI path — much lower than DEFAULT_MAX_EVALS
+# because each eval is one Ollama chat call (~60-90s), not a cheap BERT
+# forward pass. Mirrors llms.config.SHAP_MAX_EVALS_DEFAULT; kept as a plain
+# constant here (not imported from config at module scope) so importing this
+# module for the BERT SHAP path never pulls in the llms package.
+DEFAULT_MAX_EVALS_LLM: int = 50
+
 # Colour palette (matches classification.py forest-plot colours)
-SHAP_POSITIVE_COLOUR: str = "#d73027"   # red  — positive contribution to class
-SHAP_NEGATIVE_COLOUR: str = "#4575b4"   # blue — negative contribution to class
+SHAP_POSITIVE_COLOUR: str = "#d73027"  # red  — positive contribution to class
+SHAP_NEGATIVE_COLOUR: str = "#4575b4"  # blue — negative contribution to class
 
 # Portuguese stop words — filtered out of bar charts only (NOT the HTML, which
 # needs all tokens intact for the judge annotation Streamlit app).
 # Covers high-frequency function words that carry no legal signal: articles,
 # prepositions, conjunctions, pronouns, auxiliary verbs, and punctuation noise.
-PT_STOP_WORDS: frozenset[str] = frozenset({
-    # articles
-    "a", "o", "as", "os", "um", "uma", "uns", "umas",
-    # prepositions / contractions
-    "de", "da", "do", "das", "dos", "em", "na", "no", "nas", "nos",
-    "por", "pelo", "pela", "pelos", "pelas", "com", "para", "per",
-    "ante", "até", "após", "desde", "entre", "sobre", "sob", "sem",
-    "num", "numa", "nuns", "numas", "dum", "duma", "duns", "dumas",
-    "ao", "à", "aos", "às",
-    # conjunctions
-    "e", "ou", "mas", "porém", "contudo", "todavia", "entretanto",
-    "porque", "pois", "logo", "portanto", "que", "se", "nem",
-    "quando", "onde", "como", "embora", "enquanto", "caso",
-    # pronouns
-    "eu", "tu", "ele", "ela", "nós", "vós", "eles", "elas",
-    "me", "te", "se", "lhe", "lhes", "nos", "vos",
-    "meu", "minha", "meus", "minhas", "teu", "tua", "teus", "tuas",
-    "seu", "sua", "seus", "suas", "nosso", "nossa", "nossos", "nossas",
-    "este", "esta", "estes", "estas", "esse", "essa", "esses", "essas",
-    "aquele", "aquela", "aqueles", "aquelas", "isto", "isso", "aquilo",
-    "quem", "qual", "quais", "cujo", "cuja", "cujos", "cujas",
-    # auxiliary / high-frequency verbs
-    "é", "ser", "estar", "foi", "são", "era", "eram", "seja", "sejam",
-    "sendo", "sido", "tem", "ter", "teve", "têm", "tinha", "tinham",
-    "tendo", "tido", "há", "haver", "havia", "houve", "haja",
-    "pode", "podem", "podia", "podiam", "pôde", "poderem",
-    "deve", "devem", "devia", "deviam",
-    "vai", "vão", "ir", "foi",
-    # adverbs / particles
-    "não", "mais", "muito", "também", "já", "ainda", "só", "bem",
-    "sempre", "nunca", "jamais", "aqui", "ali", "lá", "cá",
-    "assim", "então", "depois", "antes", "agora", "hoje", "logo",
-    "apenas", "mesmo", "tão", "tudo", "nada", "algo", "alguém",
-    # punctuation noise that slips through the word tokenizer
-    "", " ", "-", "–", "—", "/", "\\", "(", ")", "[", "]",
-    ".", ",", ";", ":", "!", "?", "\"", "'", "``", "''",
-})
+PT_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        # articles
+        "a",
+        "o",
+        "as",
+        "os",
+        "um",
+        "uma",
+        "uns",
+        "umas",
+        # prepositions / contractions
+        "de",
+        "da",
+        "do",
+        "das",
+        "dos",
+        "em",
+        "na",
+        "no",
+        "nas",
+        "nos",
+        "por",
+        "pelo",
+        "pela",
+        "pelos",
+        "pelas",
+        "com",
+        "para",
+        "per",
+        "ante",
+        "até",
+        "após",
+        "desde",
+        "entre",
+        "sobre",
+        "sob",
+        "sem",
+        "num",
+        "numa",
+        "nuns",
+        "numas",
+        "dum",
+        "duma",
+        "duns",
+        "dumas",
+        "ao",
+        "à",
+        "aos",
+        "às",
+        # conjunctions
+        "e",
+        "ou",
+        "mas",
+        "porém",
+        "contudo",
+        "todavia",
+        "entretanto",
+        "porque",
+        "pois",
+        "logo",
+        "portanto",
+        "que",
+        "se",
+        "nem",
+        "quando",
+        "onde",
+        "como",
+        "embora",
+        "enquanto",
+        "caso",
+        # pronouns
+        "eu",
+        "tu",
+        "ele",
+        "ela",
+        "nós",
+        "vós",
+        "eles",
+        "elas",
+        "me",
+        "te",
+        "se",
+        "lhe",
+        "lhes",
+        "nos",
+        "vos",
+        "meu",
+        "minha",
+        "meus",
+        "minhas",
+        "teu",
+        "tua",
+        "teus",
+        "tuas",
+        "seu",
+        "sua",
+        "seus",
+        "suas",
+        "nosso",
+        "nossa",
+        "nossos",
+        "nossas",
+        "este",
+        "esta",
+        "estes",
+        "estas",
+        "esse",
+        "essa",
+        "esses",
+        "essas",
+        "aquele",
+        "aquela",
+        "aqueles",
+        "aquelas",
+        "isto",
+        "isso",
+        "aquilo",
+        "quem",
+        "qual",
+        "quais",
+        "cujo",
+        "cuja",
+        "cujos",
+        "cujas",
+        # auxiliary / high-frequency verbs
+        "é",
+        "ser",
+        "estar",
+        "foi",
+        "são",
+        "era",
+        "eram",
+        "seja",
+        "sejam",
+        "sendo",
+        "sido",
+        "tem",
+        "ter",
+        "teve",
+        "têm",
+        "tinha",
+        "tinham",
+        "tendo",
+        "tido",
+        "há",
+        "haver",
+        "havia",
+        "houve",
+        "haja",
+        "pode",
+        "podem",
+        "podia",
+        "podiam",
+        "pôde",
+        "poderem",
+        "deve",
+        "devem",
+        "devia",
+        "deviam",
+        "vai",
+        "vão",
+        "ir",
+        "foi",
+        # adverbs / particles
+        "não",
+        "mais",
+        "muito",
+        "também",
+        "já",
+        "ainda",
+        "só",
+        "bem",
+        "sempre",
+        "nunca",
+        "jamais",
+        "aqui",
+        "ali",
+        "lá",
+        "cá",
+        "assim",
+        "então",
+        "depois",
+        "antes",
+        "agora",
+        "hoje",
+        "logo",
+        "apenas",
+        "mesmo",
+        "tão",
+        "tudo",
+        "nada",
+        "algo",
+        "alguém",
+        # punctuation noise that slips through the word tokenizer
+        "",
+        " ",
+        "-",
+        "–",
+        "—",
+        "/",
+        "\\",
+        "(",
+        ")",
+        "[",
+        "]",
+        ".",
+        ",",
+        ";",
+        ":",
+        "!",
+        "?",
+        '"',
+        "'",
+        "``",
+        "''",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Core data contract
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ShapExplanation:
@@ -209,12 +395,12 @@ class ShapExplanation:
     model_name: str
     text: str
     tokens: list[str]
-    shap_values: np.ndarray        # (n_tokens, n_classes)
-    base_values: np.ndarray        # (n_classes,)
+    shap_values: np.ndarray  # (n_tokens, n_classes)
+    base_values: np.ndarray  # (n_classes,)
     output_names: list[str]
     predicted_class: int
     predicted_label: str
-    predict_proba: np.ndarray      # (n_classes,)
+    predict_proba: np.ndarray  # (n_classes,)
     true_label: int | None = None
     true_label_str: str | None = None
     metadata: dict = field(default_factory=dict)
@@ -223,6 +409,7 @@ class ShapExplanation:
 # ---------------------------------------------------------------------------
 # Core SHAP computation
 # ---------------------------------------------------------------------------
+
 
 def compute_shap_explanation(
     text: str,
@@ -268,13 +455,13 @@ def compute_shap_explanation(
     seed : int
         Random seed for SHAP's internal sampling (reproducibility).
 
-    Returns
+    Returns:
     -------
     ShapExplanation
         Populated container with tokens, SHAP values, base values, and
         prediction metadata.
 
-    Notes
+    Notes:
     -----
     SHAP's efficiency axiom guarantees consistency with the classifier:
         base_values[c] + sum(shap_values[:, c]) ≈ predict_fn([text])[0][c]
@@ -375,6 +562,7 @@ def compute_shap_explanation(
 # Top-terms summary bar chart
 # ---------------------------------------------------------------------------
 
+
 def plot_shap_top_terms(
     explanation: ShapExplanation,
     class_idx: int | None = None,
@@ -405,7 +593,7 @@ def plot_shap_top_terms(
     show : bool
         Whether to call ``plt.show()``.  Set False for batch export.
 
-    Returns
+    Returns:
     -------
     matplotlib.figure.Figure
     """
@@ -426,9 +614,7 @@ def plot_shap_top_terms(
         if key:
             word_sums[key] += float(val)
             word_counts[key] += 1
-    word_shap: dict[str, float] = {
-        w: word_sums[w] / word_counts[w] for w in word_sums
-    }
+    word_shap: dict[str, float] = {w: word_sums[w] / word_counts[w] for w in word_sums}
 
     # --- split into positive and negative, rank by absolute magnitude ---
     positive = sorted(
@@ -444,13 +630,17 @@ def plot_shap_top_terms(
 
     # Build combined list: positives on top (descending), negatives below (ascending)
     # so the chart reads naturally from most-positive at top to most-negative at bottom.
-    combined = positive + negative[::-1]   # negatives reversed: least-negative nearest centre
+    combined = (
+        positive + negative[::-1]
+    )  # negatives reversed: least-negative nearest centre
 
     if not combined:
         # All SHAP values are zero — model output was insensitive to token masking
         # (e.g. a very overconfident LLM).  Skip the chart rather than crash.
-        print(f"[plot_shap_top_terms] WARNING: all SHAP values are zero for "
-              f"case '{explanation.case_id}' — skipping top-terms chart.")
+        print(
+            f"[plot_shap_top_terms] WARNING: all SHAP values are zero for "
+            f"case '{explanation.case_id}' — skipping top-terms chart."
+        )
         plt.close("all")
         return None
 
@@ -463,7 +653,7 @@ def plot_shap_top_terms(
     fig_height = max(4.0, n_bars * 0.45 + 1.8)
     fig, ax = plt.subplots(figsize=(10, fig_height))
 
-    y_pos = range(n_bars - 1, -1, -1)     # top-to-bottom layout
+    y_pos = range(n_bars - 1, -1, -1)  # top-to-bottom layout
     bars = ax.barh(list(y_pos), values, color=colours, edgecolor="white", linewidth=0.4)
 
     # value labels at bar tips
@@ -474,7 +664,10 @@ def plot_shap_top_terms(
             val + (x_offset if val >= 0 else -x_offset),
             bar.get_y() + bar.get_height() / 2,
             f"{val:+.3f}",
-            va="center", ha=ha, fontsize=8, color="#333333",
+            va="center",
+            ha=ha,
+            fontsize=8,
+            color="#333333",
         )
 
     # Sentences are long; truncate display labels so the chart stays readable.
@@ -492,17 +685,26 @@ def plot_shap_top_terms(
         f"Top {top_n} Positive & Negative SHAP Sentences\n"
         f"Class predicted: '{class_label}'  |  Model: {explanation.model_name}"
         f"  |  Case: {explanation.case_id}",
-        fontsize=11, pad=10,
+        fontsize=11,
+        pad=10,
     )
 
     # legend patches
     from matplotlib.patches import Patch
+
     ax.legend(
         handles=[
-            Patch(facecolor=SHAP_POSITIVE_COLOUR, label=f"Pushes toward '{class_label}' (positive)"),
-            Patch(facecolor=SHAP_NEGATIVE_COLOUR, label=f"Pushes away from '{class_label}' (negative)"),
+            Patch(
+                facecolor=SHAP_POSITIVE_COLOUR,
+                label=f"Pushes toward '{class_label}' (positive)",
+            ),
+            Patch(
+                facecolor=SHAP_NEGATIVE_COLOUR,
+                label=f"Pushes away from '{class_label}' (negative)",
+            ),
         ],
-        fontsize=9, loc="lower right",
+        fontsize=9,
+        loc="lower right",
     )
 
     ax.spines["top"].set_visible(False)
@@ -527,6 +729,7 @@ def plot_shap_top_terms(
 # HTML export — SHAP highlighted text
 # ---------------------------------------------------------------------------
 
+
 def _shap_span_color(val: float, max_abs: float) -> str:
     """Map a SHAP value to an inline CSS background-color string.
 
@@ -538,9 +741,17 @@ def _shap_span_color(val: float, max_abs: float) -> str:
     intensity = min(abs(val) / max_abs, 1.0)
     # blend from white (255,255,255) toward the target colour
     if val > 0:
-        r, g, b = 255, int(255 * (1.0 - intensity * 0.95)), int(255 * (1.0 - intensity * 0.65))
+        r, g, b = (
+            255,
+            int(255 * (1.0 - intensity * 0.95)),
+            int(255 * (1.0 - intensity * 0.65)),
+        )
     else:
-        r, g, b = int(255 * (1.0 - intensity * 0.88)), int(255 * (1.0 - intensity * 0.45)), 255
+        r, g, b = (
+            int(255 * (1.0 - intensity * 0.88)),
+            int(255 * (1.0 - intensity * 0.45)),
+            255,
+        )
     return f"rgb({r},{g},{b})"
 
 
@@ -656,10 +867,10 @@ def export_shap_html(
     return html
 
 
-
 # ---------------------------------------------------------------------------
 # Batch save utilities + JSON export  (Step 5)
 # ---------------------------------------------------------------------------
+
 
 def explanation_to_dict(explanation: ShapExplanation) -> dict:
     """Serialise a ShapExplanation to a JSON-safe dict.
@@ -669,20 +880,22 @@ def explanation_to_dict(explanation: ShapExplanation) -> dict:
     a round-trip through ``json.dump(..., ensure_ascii=False)``.
     """
     return {
-        "case_id":        explanation.case_id,
-        "case_type":      explanation.case_type,
-        "model_name":     explanation.model_name,
-        "text":           explanation.text,
-        "tokens":         explanation.tokens,
-        "shap_values":    explanation.shap_values.tolist(),
-        "base_values":    explanation.base_values.tolist(),
-        "output_names":   explanation.output_names,
+        "case_id": explanation.case_id,
+        "case_type": explanation.case_type,
+        "model_name": explanation.model_name,
+        "text": explanation.text,
+        "tokens": explanation.tokens,
+        "shap_values": explanation.shap_values.tolist(),
+        "base_values": explanation.base_values.tolist(),
+        "output_names": explanation.output_names,
         "predicted_class": int(explanation.predicted_class),
         "predicted_label": explanation.predicted_label,
-        "predict_proba":  explanation.predict_proba.tolist(),
-        "true_label":     int(explanation.true_label) if explanation.true_label is not None else None,
+        "predict_proba": explanation.predict_proba.tolist(),
+        "true_label": (
+            int(explanation.true_label) if explanation.true_label is not None else None
+        ),
         "true_label_str": explanation.true_label_str,
-        "metadata":       explanation.metadata,
+        "metadata": explanation.metadata,
     }
 
 
@@ -705,8 +918,12 @@ def save_explanation_json(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as fh:
-        json.dump([explanation_to_dict(e) for e in explanations], fh,
-                  ensure_ascii=False, indent=2)
+        json.dump(
+            [explanation_to_dict(e) for e in explanations],
+            fh,
+            ensure_ascii=False,
+            indent=2,
+        )
 
 
 def explanations_to_long_dataframe(
@@ -717,13 +934,13 @@ def explanations_to_long_dataframe(
     This is the layout pandas-based analysis wants: ranking or filtering
     sentences by SHAP value, either within a case or across the whole batch.
 
-    Example
+    Example:
     -------
     df = explanations_to_long_dataframe(explanations)
     df.sort_values("shap_value_predicted_class", ascending=False).head(10)
     df[df.case_id == "65_24.0GEBRG.G1"].nsmallest(5, "shap_value_predicted_class")
 
-    Returns
+    Returns:
     -------
     pandas.DataFrame
         One row per sentence per case. Columns:
@@ -750,7 +967,9 @@ def explanations_to_long_dataframe(
                     "shap_values_all_classes": [float(v) for v in sv_row],
                     "predicted_class": int(exp.predicted_class),
                     "predicted_label": exp.predicted_label,
-                    "true_label": int(exp.true_label) if exp.true_label is not None else None,
+                    "true_label": (
+                        int(exp.true_label) if exp.true_label is not None else None
+                    ),
                     "true_label_str": exp.true_label_str,
                     "output_names": list(exp.output_names),
                     "predict_proba": [float(p) for p in exp.predict_proba],
@@ -818,7 +1037,7 @@ def save_explanation_batch(
         Optional extra directory level between case_type_dir and model_name.
         Use "5_gold_set" to separate judge-annotated gold cases from general runs.
 
-    Returns
+    Returns:
     -------
     Path
         The model-level output directory where all files were written.
@@ -828,7 +1047,7 @@ def save_explanation_batch(
 
     output_base_dir = Path(output_base_dir)
     first = explanations[0]
-    case_dir  = CASE_TYPE_OUTPUT_DIRS.get(first.case_type, first.case_type)
+    case_dir = CASE_TYPE_OUTPUT_DIRS.get(first.case_type, first.case_type)
     if subdir:
         model_dir = output_base_dir / case_dir / subdir / first.model_name
     else:
@@ -838,7 +1057,8 @@ def save_explanation_batch(
     for exp in explanations:
         if save_html:
             export_shap_html(
-                exp, filter_mode="all",
+                exp,
+                filter_mode="all",
                 output_path=model_dir / f"{exp.case_id}.html",
             )
         if save_bar_png:
@@ -856,6 +1076,7 @@ def save_explanation_batch(
 # ---------------------------------------------------------------------------
 # LLM adapter + batch pipeline entry point  (Step 7)
 # ---------------------------------------------------------------------------
+
 
 def make_llm_predict_fn(
     ollama_label_fn: Callable[[str], str],
@@ -890,7 +1111,7 @@ def make_llm_predict_fn(
         Probability mass distributed uniformly over non-predicted classes.
         Default 0.1 gives 90 / 5 % split for binary, 90 / 5 / 5 for ternary.
 
-    Returns
+    Returns:
     -------
     Callable[[list[str]], np.ndarray]
         Batch predict function: list of N strings → (N, n_classes) array.
@@ -902,7 +1123,9 @@ def make_llm_predict_fn(
         proba = np.empty((len(texts), n_classes), dtype=float)
         for i, text in enumerate(texts):
             label = ollama_label_fn(text)
-            pred_idx = label_to_idx.get(label, 0)   # fallback to class 0 on unknown label
+            pred_idx = label_to_idx.get(
+                label, 0
+            )  # fallback to class 0 on unknown label
             row = np.full(n_classes, temperature_smoothing / max(n_classes - 1, 1))
             row[pred_idx] = 1.0 - temperature_smoothing
             proba[i] = row
@@ -950,7 +1173,7 @@ def run_shap_explanation_pipeline(
     max_evals : int
         SHAP budget per document.  Use 200 for large batches.
 
-    Returns
+    Returns:
     -------
     list[ShapExplanation]
         One ShapExplanation per input text.
@@ -986,12 +1209,215 @@ def run_shap_explanation_pipeline(
 
 
 # ---------------------------------------------------------------------------
+# CLI — LLM SHAP against a real Ollama server, on gold-test documents
+# ---------------------------------------------------------------------------
+
+
+def _build_ollama_label_fn(
+    model_tag: str,
+    case_type: str,
+    valid_labels: set[str],
+    seed: int,
+    temperature: float,
+    num_ctx: int,
+    timeout: int,
+) -> Callable[[str], str]:
+    """Build a single-text label function backed by a real Ollama server.
+
+    Wraps the same zero-shot prompt and deterministic decoding options
+    ``llms/predict.py`` uses for its ``--stage zero_shot`` runs, so SHAP
+    attributions stay consistent with how the model is evaluated elsewhere
+    in the pipeline. Imports the LLM modules lazily so importing
+    ``explanation.py`` for the BERT SHAP path (``dl/predict.py --shap``)
+    never requires an Ollama connection or the ``requests`` dependency.
+
+    Args:
+        model_tag: Ollama model tag, e.g. "deepseek-r1:8b" (see
+            ``llms.config.OLLAMA_MODELS`` for the short-name mapping).
+        case_type: "dv" or "boc".
+        valid_labels: Accepted ``predicted_label`` strings for this case type.
+        seed: Ollama decoding seed.
+        temperature: Ollama decoding temperature.
+        num_ctx: Ollama context window (tokens). Ollama's server-side default
+            is a small 4096 regardless of the model's real context length —
+            full legal case texts routinely exceed that (confirmed empirically:
+            a 35KB case is ~10,900 tokens), so this must be set explicitly or
+            every request 400s with "exceeds the available context size".
+        timeout: Per-request timeout in seconds.
+
+    Returns:
+        Callable[[str], str]: text -> predicted label string, suitable for
+        ``make_llm_predict_fn``.
+    """
+    _llms_dir = Path(__file__).resolve().parents[1] / "modeling" / "llms"
+    import sys as _sys
+
+    if str(_llms_dir) not in _sys.path:
+        _sys.path.insert(0, str(_llms_dir))
+    from client import OllamaClient
+    from config import OLLAMA_DETERMINISTIC_OPTIONS
+    from prompts import build_zero_shot_prompt
+
+    # Deliberately not importing llms/predict.py's `_build_ollama_options` helper
+    # here: this codebase has a known `dl/predict.py` vs `llms/predict.py` bare
+    # module-name collision (see LESSONS.md L-series), and depending on what
+    # else has already been imported into sys.modules under the name `predict`,
+    # `from predict import ...` can silently resolve to the wrong one. Inlining
+    # this trivial 3-line transformation avoids the collision entirely.
+    client = OllamaClient()
+    options = dict(OLLAMA_DETERMINISTIC_OPTIONS)
+    options["seed"] = int(seed)
+    options["temperature"] = float(temperature)
+    options["num_ctx"] = int(num_ctx)
+
+    def label_fn(text: str) -> str:
+        messages = build_zero_shot_prompt(case_type, "shap-explain", text)
+        result = client.chat_with_validation(
+            model_tag, messages, valid_labels, options=options, timeout=timeout
+        )
+        return result["predicted_label"]
+
+    return label_fn
+
+
+def _run_llm_shap_cli(args) -> None:
+    """Run LLM SHAP against real gold-test documents via a live Ollama server."""
+    _dl_dir = Path(__file__).resolve().parents[1] / "modeling" / "dl"
+    _llms_dir = Path(__file__).resolve().parents[1] / "modeling" / "llms"
+    import sys as _sys
+
+    for _p in (str(_dl_dir), str(_llms_dir)):
+        if _p not in _sys.path:
+            _sys.path.insert(0, str(_p))
+    from config import LABEL_OUTPUT_NAMES, LABEL_STR_TO_INT, OLLAMA_MODELS
+    from features import load_split_text_data
+
+    output_names = LABEL_OUTPUT_NAMES[args.case_type]
+    valid_labels = set(output_names)
+    label_str_to_int = LABEL_STR_TO_INT[args.case_type]
+    model_tag = OLLAMA_MODELS[args.model]
+
+    texts, y_raw, _dates, n_processo = load_split_text_data(
+        args.case_type, split=args.split
+    )
+    true_labels = [label_str_to_int.get(y) for y in y_raw]
+
+    if args.shap_cases:
+        wanted = set(args.shap_cases)
+        indices = [i for i, cid in enumerate(n_processo) if cid in wanted]
+        missing = wanted - {n_processo[i] for i in indices}
+        if missing:
+            raise SystemExit(f"Case id(s) not found in {args.split} split: {missing}")
+    else:
+        limit = len(texts) if args.max_docs == 0 else args.max_docs
+        indices = list(range(min(limit, len(texts))))
+
+    sel_texts = [texts[i] for i in indices]
+    sel_ids = [n_processo[i] for i in indices]
+    sel_true = [true_labels[i] for i in indices]
+
+    label_fn = _build_ollama_label_fn(
+        model_tag=model_tag,
+        case_type=args.case_type,
+        valid_labels=valid_labels,
+        seed=args.seed,
+        temperature=args.temperature,
+        num_ctx=args.num_ctx,
+        timeout=args.request_timeout,
+    )
+    predict_fn = make_llm_predict_fn(label_fn, output_names)
+
+    print(
+        f"Running LLM SHAP: model={args.model} ({model_tag}), case_type={args.case_type}, "
+        f"{len(sel_ids)} document(s), max_evals={args.max_evals}"
+    )
+    run_shap_explanation_pipeline(
+        texts=sel_texts,
+        case_ids=sel_ids,
+        predict_fn=predict_fn,
+        output_names=output_names,
+        case_type=args.case_type,
+        model_name=f"{args.model}_zero_shot",
+        output_base_dir=Path(args.output_dir),
+        true_labels=sel_true,
+        max_evals=args.max_evals,
+    )
+    print(f"Done. Outputs under {Path(args.output_dir).resolve()}")
+
+
+def _parse_args(argv: list[str] | None = None):
+    """Parse CLI arguments for real-data LLM SHAP, or the synthetic smoke test."""
+    import argparse
+    import sys as _sys
+
+    _llms_dir = Path(__file__).resolve().parents[1] / "modeling" / "llms"
+    if str(_llms_dir) not in _sys.path:
+        _sys.path.insert(0, str(_llms_dir))
+    from config import OLLAMA_MODELS as _OLLAMA_MODELS
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate sentence-level SHAP explanations for the LLM zero-shot "
+            "classifier against a live Ollama server. For BERT SHAP, use "
+            "`python src/modeling/dl/predict.py --mode bert --shap` instead "
+            "(see docs/07-explainability.md)."
+        )
+    )
+    parser.add_argument(
+        "--smoke_test",
+        action="store_true",
+        help="Run the synthetic demo (no Ollama needed) instead of real data.",
+    )
+    parser.add_argument("--case_type", choices=["dv", "boc"])
+    parser.add_argument(
+        "--model", choices=list(_OLLAMA_MODELS), default="deepseek_r1_8b"
+    )
+    parser.add_argument("--split", choices=["gold_test", "train"], default="gold_test")
+    parser.add_argument(
+        "--max_docs",
+        type=int,
+        default=3,
+        help="Max documents to explain (default: 3 — each is ~50-75 min at max_evals=50). 0 = all.",
+    )
+    parser.add_argument(
+        "--shap_cases",
+        nargs="+",
+        default=None,
+        help="Explain these specific n_processo values instead of the first --max_docs.",
+    )
+    parser.add_argument("--max_evals", type=int, default=DEFAULT_MAX_EVALS_LLM)
+    parser.add_argument("--output_dir", default="shap_explanations")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument(
+        "--num_ctx",
+        type=int,
+        default=32768,
+        help=(
+            "Ollama context window (tokens). Ollama's server-side default is a "
+            "small 4096 regardless of the model's real context length, and full "
+            "case texts routinely need more (~11k tokens is common) — every "
+            "SHAP-masked request 400s with 'exceeds the available context size' "
+            "if this is too low."
+        ),
+    )
+    parser.add_argument("--request_timeout", type=int, default=180)
+    args = parser.parse_args(argv)
+
+    if not args.smoke_test and not args.case_type:
+        parser.error("--case_type is required unless --smoke_test is set")
+    return args
+
+
+# ---------------------------------------------------------------------------
 # Smoke test — full pipeline with dummy LLM predict_fn
 # ---------------------------------------------------------------------------
 
+
 def _smoke_test_pipeline():
     """End-to-end smoke test: dummy LLM + 3 fake texts → HTML / PNG / JSON."""
-    import tempfile, webbrowser
+    import tempfile
+    import webbrowser
 
     # --- binary task (DV) ---
     output_names_dv = list(LABEL_NAMES_DV.values())
@@ -1002,16 +1428,25 @@ def _smoke_test_pipeline():
 
     predict_fn_dv = make_llm_predict_fn(fake_ollama, output_names_dv)
 
+    # Each fixture needs at least two sentences: shap==0.51.0's Text masker
+    # clustering crashes (`ValueError: zero-size array to reduction operation
+    # maximum which has no identity`) on a single-sentence document, since
+    # there is nothing to build a merge hierarchy from. Real case texts are
+    # always many sentences long, so this only bites synthetic single-line
+    # fixtures like these — verified real multi-sentence documents are fine.
     texts = [
-        "O arguido agrediu a vítima repetidamente causando lesões graves no rosto.",
-        "Não existem provas suficientes para sustentar a acusação formulada pelo Ministério Público.",
-        "O tribunal de primeira instância decidiu manter a pena suspensa aplicada ao recorrente.",
+        "O arguido agrediu a vítima repetidamente causando lesões graves no rosto. "
+        "A vítima apresentou queixa junto das autoridades no dia seguinte.",
+        "Não existem provas suficientes para sustentar a acusação formulada pelo "
+        "Ministério Público. O tribunal absolveu o arguido por falta de provas.",
+        "O tribunal de primeira instância decidiu manter a pena suspensa aplicada "
+        "ao recorrente. O recurso foi julgado improcedente em todos os pontos.",
     ]
-    case_ids  = ["proc-001", "proc-002", "proc-003"]
+    case_ids = ["proc-001", "proc-002", "proc-003"]
     true_labels = [1, 0, 0]
 
     tmp = Path(tempfile.mkdtemp())
-    explanations = run_shap_explanation_pipeline(
+    run_shap_explanation_pipeline(
         texts=texts,
         case_ids=case_ids,
         predict_fn=predict_fn_dv,
@@ -1036,4 +1471,8 @@ def _smoke_test_pipeline():
 
 
 if __name__ == "__main__":
-    _smoke_test_pipeline()
+    _cli_args = _parse_args()
+    if _cli_args.smoke_test:
+        _smoke_test_pipeline()
+    else:
+        _run_llm_shap_cli(_cli_args)

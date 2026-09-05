@@ -1,5 +1,4 @@
-"""
-Domestic Violence Scraper for Portuguese Courts (DGSI)
+"""Domestic Violence Scraper for Portuguese Courts (DGSI).
 
 This module extracts and processes legal documents related to domestic violence cases
 from Portuguese Tribunais de Relação (Courts of Appeal).
@@ -26,16 +25,25 @@ Author: Helton Mendonça
 Transparency Note: This code was optimized and polished using AI assistance(mainly Claude 4.0 and 4.5). However, all the logic, structure and final review were done by the author.
 
 Date: October 13th 2025
+
+Corpus snapshot warning
+------------------------
+The corpus used in this dissertation was scraped in November 2025 and therefore contains only
+cases published up to that date. Re-running this scraper today will return a larger and
+different set of cases, because the source databases are continuously updated. It will
+therefore not reproduce the exact dataset counts or evaluation figures reported in the thesis.
+To reproduce the published results, use the archived corpus from the Zenodo record (see
+docs/09-reproducibility-notes.md) rather than re-scraping.
 """
 
 import re
+
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 
 
 class DomesticViolenceScraper:
-    """
-    Scraper for domestic violence cases from Portuguese Courts of Appeal.
+    """Scraper for domestic violence cases from Portuguese Courts of Appeal.
 
     Supports extraction from:
     - TRE (Tribunal da Relação de Évora)
@@ -58,8 +66,7 @@ class DomesticViolenceScraper:
     async def scrape_judgment(
         self, url, court_name="Unknown", case_type="VIOLÊNCIA DOMÉSTICA"
     ):
-        """
-        Scrape a single judgment from DGSI.
+        """Scrape a single judgment from DGSI.
 
         Args:
             url (str): URL of the judgment page
@@ -86,8 +93,7 @@ class DomesticViolenceScraper:
             return None
 
     def _extract_metadata(self, soup, url, court_name, case_type):
-        """
-        Extract all metadata from judgment HTML.
+        """Extract all metadata from judgment HTML.
 
         Args:
             soup: BeautifulSoup parsed HTML
@@ -254,8 +260,7 @@ class DomesticViolenceScraper:
         return full_text
 
     def _extract_decision_from_text(self, full_text):
-        """
-        Extract final decision from judgment text using progressive cascade algorithm.
+        """Extract final decision from judgment text using progressive cascade algorithm.
 
         This is the core algorithm that separates the final decision (dispositivo)
         from the rest of the judgment to prevent data leakage in ML models.
@@ -433,11 +438,7 @@ class DomesticViolenceScraper:
         decimal_iso,
         verbs,
     ):
-        """
-        Try to extract decision using all patterns in priority order.
-        Returns extracted result if successful, None otherwise.
-        """
-
+        """Try to extract the decision using all cascade patterns in priority order, returning the first successful match or None."""
         # Layer 1A: DISPOSITIVO with roman numerals
         matches = list(
             re.finditer(disp_roman, search_text, re.IGNORECASE | re.MULTILINE)
@@ -604,8 +605,7 @@ class DomesticViolenceScraper:
         confidence,
         require_verbs=False,
     ):
-        """
-        Validate and extract decision text from a pattern match.
+        """Validate and extract decision text from a pattern match.
 
         Args:
             full_text: Complete judgment text

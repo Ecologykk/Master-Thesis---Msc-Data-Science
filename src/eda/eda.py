@@ -1,5 +1,14 @@
+"""Exploratory data analysis for the DV/BoC case corpora: plots, text metrics, and 3D UMAP views.
+
+Two entry points cover most use: `run_case_eda(case_type, base_dir)` regenerates the standard
+figure set (class distribution, temporal drift, word/n-gram frequency, tribunal and judge-gender
+breakdowns) for one case type into `eda_viz/`, and `plotly_umap_3d` / `plotly_umap_3d_combined`
+render interactive 3D UMAP projections of BERT embeddings to HTML.
+"""
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
@@ -8,7 +17,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import re
 
 # ==============================
 # Configuration
@@ -54,6 +62,17 @@ DECISION_COLOURS_TERNARY = {
 
 @dataclass(frozen=True)
 class CaseSchema:
+    """Per-case-type constants: which label column, class names, and colours to use.
+
+    Attributes:
+        case_type: "dv" or "boc".
+        schema: "binary" (dv) or "ternary" (boc) — the folder name under data/processed_data.
+        decision_column: Name of the label column in the eda CSV ("decisao_binaria" or
+            "decisao_ternaria").
+        decision_labels: Raw label string -> short display label (e.g. "Kept", "Favourable").
+        decision_colours: Display label -> hex colour, used consistently across all plots.
+    """
+
     case_type: str
     schema: str
     decision_column: str
@@ -62,6 +81,17 @@ class CaseSchema:
 
 
 def get_case_schema(case_type: str) -> CaseSchema:
+    """Look up the CaseSchema for a case type.
+
+    Args:
+        case_type: "dv" or "boc" (case-insensitive, surrounding whitespace tolerated).
+
+    Returns:
+        The matching CaseSchema.
+
+    Raises:
+        ValueError: If case_type is not "dv" or "boc".
+    """
     case_type = case_type.lower().strip()
     if case_type == "dv":
         return CaseSchema(
@@ -83,10 +113,20 @@ def get_case_schema(case_type: str) -> CaseSchema:
 
 
 def get_project_root() -> Path:
+    """Return the repository root, resolved relative to this file's location."""
     return Path(__file__).resolve().parents[2]
 
 
 def load_eda_dataframe(case_type: str, base_dir: Path | None = None) -> pd.DataFrame:
+    """Load the labelled EDA-view CSV for one case type.
+
+    Args:
+        case_type: "dv" or "boc".
+        base_dir: Repository root. Defaults to `get_project_root()`.
+
+    Returns:
+        The DataFrame at `data/processed_data/eda/{schema}/df_acordaos_{case_type}_eda_{schema}.csv`.
+    """
     schema = get_case_schema(case_type)
     base_dir = base_dir or get_project_root()
     data_path = (
@@ -101,6 +141,16 @@ def load_eda_dataframe(case_type: str, base_dir: Path | None = None) -> pd.DataF
 
 
 def ensure_output_dir(base_dir: Path, case_type: str, section: str) -> Path:
+    """Create (if needed) and return the output directory for one figure section.
+
+    Args:
+        base_dir: Repository root.
+        case_type: "dv" or "boc".
+        section: Figure subsection name (e.g. "basic_stats", "time_analysis", "tribunal").
+
+    Returns:
+        `{base_dir}/eda_viz/{case folder}/{section}`.
+    """
     out_dir = base_dir / "eda_viz" / CASE_FOLDERS[case_type] / section
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
@@ -109,6 +159,17 @@ def ensure_output_dir(base_dir: Path, case_type: str, section: str) -> Path:
 def normalise_decision_labels(
     df: pd.DataFrame, decision_column: str, label_map: Dict[str, str]
 ) -> pd.DataFrame:
+    """Map raw uppercase decision strings to short display labels in a new `decision_label` column.
+
+    Args:
+        df: Input DataFrame containing `decision_column`.
+        decision_column: Name of the column holding the raw label (e.g. "decisao_binaria").
+        label_map: Raw label -> display label (e.g. DECISION_LABELS_BINARY).
+
+    Returns:
+        Copy of `df` with a `decision_label` column added. Rows whose raw value isn't in
+        `label_map` get NaN.
+    """
     df = df.copy()
     df["decision_label"] = (
         df[decision_column]
@@ -121,6 +182,18 @@ def normalise_decision_labels(
 
 
 def add_date_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Parse `data_acordao` into a datetime column and derive a `year` column from it.
+
+    Args:
+        df: Input DataFrame with a `data_acordao` column (day-first date strings).
+
+    Returns:
+        Copy of `df` with `acordao_date` (datetime) and `year` (int, NaN where unparseable)
+        columns added.
+
+    Raises:
+        KeyError: If `data_acordao` is not a column in `df`.
+    """
     df = df.copy()
     if "data_acordao" not in df.columns:
         raise KeyError("Column 'data_acordao' not found in dataframe.")
@@ -132,6 +205,14 @@ def add_date_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def clean_text_basic(text: str) -> str:
+    """Lowercase, strip punctuation, and collapse whitespace.
+
+    Args:
+        text: Input text. Non-string input returns an empty string.
+
+    Returns:
+        Cleaned text.
+    """
     if not isinstance(text, str):
         return ""
     text = text.lower()
@@ -141,6 +222,14 @@ def clean_text_basic(text: str) -> str:
 
 
 def clean_text_advanced(text: str) -> str:
+    """Apply `clean_text_basic`, then also strip standalone digits/ordinals and single letters.
+
+    Args:
+        text: Input text.
+
+    Returns:
+        Cleaned text, suitable as input to tokenisation for word/n-gram frequency plots.
+    """
     text = clean_text_basic(text)
     text = re.sub(r"\b\d+º?\b", " ", text)
     text = re.sub(r"\b\w\b", " ", text)
@@ -149,6 +238,7 @@ def clean_text_advanced(text: str) -> str:
 
 
 def _ensure_nltk_resource(resource: str) -> None:
+    """Download an NLTK resource (e.g. "tokenizers/punkt") if it isn't already available locally."""
     import nltk
 
     try:
@@ -158,6 +248,17 @@ def _ensure_nltk_resource(resource: str) -> None:
 
 
 def add_text_metrics(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
+    """Add cleaned-text, length, word-count, and sentence-count columns.
+
+    Args:
+        df: Input DataFrame.
+        text_column: Name of the column holding raw text to measure.
+
+    Returns:
+        Copy of `df` with `clean_text`, `text_length_raw`, `text_length_clean`, `word_count`,
+        and `sentence_count` columns added. Downloads the NLTK "punkt" tokenizer on first use
+        if not already present.
+    """
     import nltk
     from nltk.tokenize import sent_tokenize, word_tokenize
 
@@ -180,6 +281,17 @@ def add_text_metrics(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
 def add_tokens_no_stopwords(
     df: pd.DataFrame, text_column: str = "clean_text"
 ) -> pd.DataFrame:
+    """Tokenise a text column and drop Portuguese stopwords.
+
+    Args:
+        df: Input DataFrame.
+        text_column: Name of the column to tokenise. Defaults to "clean_text" (the output
+            of `add_text_metrics`).
+
+    Returns:
+        Copy of `df` with a `tokens_no_stopwords` column (list[str] per row) added. Downloads
+        the NLTK "stopwords" corpus and "punkt" tokenizer on first use if not already present.
+    """
     import nltk
     from nltk.corpus import stopwords
     from nltk.tokenize import word_tokenize
@@ -198,6 +310,7 @@ def add_tokens_no_stopwords(
 
 
 def _blend_with_white(base_hex: str, values: Iterable[float]) -> List[str]:
+    """Blend a base colour with white, proportionally to each min-max-normalised value."""
     import matplotlib.colors as mcolors
 
     rgb_base = np.array(mcolors.to_rgb(base_hex))
@@ -218,6 +331,13 @@ def _blend_with_white(base_hex: str, values: Iterable[float]) -> List[str]:
 
 
 def plot_cases_per_year(df: pd.DataFrame, case_type: str, base_dir: Path) -> None:
+    """Line plot of case count per publication year; saved to `eda_viz/{case}/time_analysis/`.
+
+    Args:
+        df: DataFrame with a `data_acordao` column.
+        case_type: "dv" or "boc".
+        base_dir: Repository root.
+    """
     df = add_date_columns(df)
     counts = df["year"].value_counts().sort_index()
 
@@ -242,6 +362,15 @@ def plot_year_distribution_by_class(
     class_colours: Dict[str, str],
     base_dir: Path,
 ) -> None:
+    """Boxplot of publication year per decision class; saved to `eda_viz/{case}/time_analysis/`.
+
+    Args:
+        df: DataFrame with `data_acordao` and `class_col`.
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by (e.g. "decision_label").
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+    """
     df = add_date_columns(df)
     plt.figure(figsize=(8, 5))
     sns.boxplot(
@@ -268,6 +397,17 @@ def plot_temporal_drift(
     class_colours: Dict[str, str],
     base_dir: Path,
 ) -> None:
+    """Stacked bar chart of decision-class proportion per year; saved to `.../time_analysis/`.
+
+    Shows whether the class balance drifts over time (e.g. more ALTERADA cases in recent years).
+
+    Args:
+        df: DataFrame with `data_acordao` and `class_col`.
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+    """
     df = add_date_columns(df)
     counts = pd.crosstab(df["year"], df[class_col]).sort_index()
     props = counts.div(counts.sum(axis=1), axis=0).fillna(0) * 100
@@ -294,6 +434,15 @@ def plot_class_distribution(
     class_colours: Dict[str, str],
     base_dir: Path,
 ) -> None:
+    """Bar chart of decision-class counts with count/percentage labels; saved to `.../basic_stats/`.
+
+    Args:
+        df: DataFrame with `class_col`.
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to count.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+    """
     counts = df[class_col].value_counts()
     plt.figure(figsize=(7, 4))
     ax = sns.barplot(x=counts.index, y=counts.values, palette=class_colours)
@@ -338,6 +487,15 @@ def plot_text_length_by_class(
     class_colours: Dict[str, str],
     base_dir: Path,
 ) -> None:
+    """Boxplot of raw text length (characters) by decision class; saved to `.../basic_stats/`.
+
+    Args:
+        df: DataFrame with `class_col` and a `text_length_raw` column (see `add_text_metrics`).
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+    """
     plt.figure(figsize=(8, 5))
     sns.boxplot(data=df, x=class_col, y="text_length_raw", palette=class_colours)
     plt.title(f"{CASE_LABELS[case_type]} — Text length by decision")
@@ -363,6 +521,7 @@ def _plot_ranked_bars(
     ylabel: str,
     title: str,
 ) -> None:
+    """Draw a horizontal ranked bar chart on `ax`, shading bars by value via `_blend_with_white`."""
     colours = _blend_with_white(base_colour, values)
     ax.barh(labels, values, color=colours)
     ax.set_title(title)
@@ -374,6 +533,7 @@ def _plot_ranked_bars(
 def _extract_most_common(
     tokens_list: Iterable[List[str]], top_n: int
 ) -> List[Tuple[str, int]]:
+    """Flatten a series of token lists and return the `top_n` most common tokens with counts."""
     from collections import Counter
 
     counter: Counter[str] = Counter()
@@ -391,6 +551,17 @@ def plot_word_frequency_per_class(
     base_dir: Path,
     top_n: int = 20,
 ) -> None:
+    """Side-by-side horizontal bar charts of top word frequencies per class; saved to `.../basic_stats/`.
+
+    Args:
+        df: DataFrame with `class_col` and a `tokens_no_stopwords` column (see
+            `add_tokens_no_stopwords`).
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+        top_n: Number of top words to show per class. Defaults to 20.
+    """
     classes = list(df[class_col].unique())
     fig, axes = plt.subplots(1, len(classes), figsize=(8 * len(classes), 6))
     if len(classes) == 1:
@@ -429,8 +600,22 @@ def plot_ngram_frequency_per_class(
     n: int = 2,
     top_n: int = 20,
 ) -> None:
-    from nltk.util import ngrams
+    """Side-by-side horizontal bar charts of top n-gram frequencies per class.
+
+    Saved to `eda_viz/{case}/basic_stats/{n}grams_frequency_{case}.png`.
+
+    Args:
+        df: DataFrame with `class_col` and a `tokens_no_stopwords` column.
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+        n: N-gram size (2 = bigrams, 3 = trigrams). Defaults to 2.
+        top_n: Number of top n-grams to show per class. Defaults to 20.
+    """
     from collections import Counter
+
+    from nltk.util import ngrams
 
     classes = list(df[class_col].unique())
     fig, axes = plt.subplots(1, len(classes), figsize=(8 * len(classes), 6))
@@ -474,6 +659,20 @@ def plot_tfidf_per_class(
     ngram_range: Tuple[int, int] = (1, 1),
     top_n: int = 20,
 ) -> None:
+    """Side-by-side horizontal bar charts of top mean TF-IDF terms per class.
+
+    Fits a separate `TfidfVectorizer` per class on its `tokens_no_stopwords` (rejoined to
+    strings), then ranks terms by mean TF-IDF score. Saved to `eda_viz/{case}/basic_stats/`.
+
+    Args:
+        df: DataFrame with `class_col` and a `tokens_no_stopwords` column.
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+        ngram_range: TF-IDF n-gram range, e.g. (2, 2) for bigrams only. Defaults to (1, 1).
+        top_n: Number of top terms to show per class. Defaults to 20.
+    """
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     classes = list(df[class_col].unique())
@@ -525,6 +724,18 @@ def plot_decisions_by_tribunal(
     class_colours: Dict[str, str],
     base_dir: Path,
 ) -> None:
+    """Stacked horizontal bar chart of decision-class proportion per tribunal.
+
+    All peace courts (tribunal names starting with "JP") are grouped into a single "JP" row.
+    Saved to `eda_viz/{case}/tribunal/`.
+
+    Args:
+        df: DataFrame with `tribunal` and `class_col`.
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+    """
     df_plot = df.copy()
     df_plot["tribunal"] = df_plot["tribunal"].apply(
         lambda x: "JP" if str(x).startswith("JP") else x
@@ -555,6 +766,7 @@ def plot_decisions_by_tribunal(
 
 
 def _extract_first_name(full_name: str | None) -> str | None:
+    """Extract and normalise the first token of a full name, for gender-guessing lookup."""
     if not full_name or not isinstance(full_name, str):
         return None
     name = full_name.strip()
@@ -568,6 +780,21 @@ def _extract_first_name(full_name: str | None) -> str | None:
 def classify_judge_gender(
     df: pd.DataFrame, judge_column: str = "juiz_relator"
 ) -> pd.DataFrame:
+    """Infer presiding judge gender from their first name, for descriptive EDA only.
+
+    Uses the `gender_guesser` library's Portuguese-name heuristics on the first token of
+    `judge_column`. This is a probabilistic name-based inference, not a verified judge
+    attribute — treat it as descriptive/exploratory, not ground truth.
+
+    Args:
+        df: DataFrame with `judge_column`.
+        judge_column: Name of the column holding the judge's full name. Defaults to
+            "juiz_relator".
+
+    Returns:
+        Copy of `df` with `judge_first_name`, `judge_gender_raw` (the raw gender_guesser
+        label), and `judge_gender` ("Male", "Female", or "Unknown") columns added.
+    """
     import gender_guesser.detector as gender
 
     df_gender = df.copy()
@@ -602,6 +829,19 @@ def plot_decisions_by_judge_gender(
     base_dir: Path,
     gender_column: str = "judge_gender",
 ) -> None:
+    """Stacked horizontal bar chart of decision-class proportion per inferred judge gender.
+
+    Expects `df` to already have the gender column added by `classify_judge_gender`. Saved to
+    `eda_viz/{case}/judge_gender/`.
+
+    Args:
+        df: DataFrame with `gender_column` and `class_col`.
+        case_type: "dv" or "boc".
+        class_col: Name of the decision-label column to group by.
+        class_colours: Display label -> hex colour.
+        base_dir: Repository root.
+        gender_column: Name of the inferred-gender column. Defaults to "judge_gender".
+    """
     ct_pct = pd.crosstab(df[gender_column], df[class_col], normalize="index") * 100
     gender_counts = df[gender_column].value_counts()
     ct_pct = ct_pct.loc[gender_counts.index]
@@ -710,8 +950,7 @@ def plotly_umap_3d(
     show_figure: bool = True,
     title: str | None = None,
 ) -> Tuple[pd.DataFrame, object]:
-    """
-    Interactive 3D UMAP for BERT token embeddings parquet files.
+    """Interactive 3D UMAP for BERT token embeddings parquet files.
 
     The input parquet can be an absolute path, project-relative path, or just filename.
     Filenames are resolved against:
@@ -855,7 +1094,7 @@ def plotly_umap_3d(
         if resolved_case_type in CASE_LABELS
         else resolved_parquet_path.stem
     )
-    if title  == None:
+    if title is None:
         fig.update_layout(title=f"3D UMAP - {title_label} embeddings ({len(df)} cases)")
     else:
         fig.update_layout(title=title)
@@ -900,8 +1139,8 @@ def plotly_umap_3d_combined(
     show_figure: bool = True,
     title: str | None = None,
 ) -> Tuple[pd.DataFrame, object]:
-    """
-    Interactive 3D UMAP combining both DV and BOC case embeddings in a single visualization.
+    """Interactive 3D UMAP combining both DV and BOC case embeddings in a single visualization.
+
     Each case type is colored distinctly (red for DV, blue for BOC).
 
     Args:
@@ -944,7 +1183,9 @@ def plotly_umap_3d_combined(
     if "embedding" not in df_dv.columns:
         raise KeyError("Column 'embedding' not found in DV embeddings parquet.")
     if sample_size is not None and len(df_dv) > int(sample_size):
-        df_dv = df_dv.sample(int(sample_size), random_state=int(random_state)).reset_index(drop=True)
+        df_dv = df_dv.sample(
+            int(sample_size), random_state=int(random_state)
+        ).reset_index(drop=True)
     df_dv["case_type_label"] = "Domestic Violence"
 
     # Load and prepare BOC data
@@ -953,19 +1194,25 @@ def plotly_umap_3d_combined(
     if "embedding" not in df_boc.columns:
         raise KeyError("Column 'embedding' not found in BOC embeddings parquet.")
     if sample_size is not None and len(df_boc) > int(sample_size):
-        df_boc = df_boc.sample(int(sample_size), random_state=int(random_state)).reset_index(drop=True)
+        df_boc = df_boc.sample(
+            int(sample_size), random_state=int(random_state)
+        ).reset_index(drop=True)
     df_boc["case_type_label"] = "Breach of Contract"
 
     # Combine datasets
     df = pd.concat([df_dv, df_boc], ignore_index=True)
-    print(f"Combined dataset: {len(df_dv)} DV cases + {len(df_boc)} BOC cases = {len(df)} total")
+    print(
+        f"Combined dataset: {len(df_dv)} DV cases + {len(df_boc)} BOC cases = {len(df)} total"
+    )
 
     # Convert embeddings to array and create UMAP
     try:
         df["embedding"] = df["embedding"].apply(_to_array)
         X = np.vstack(df["embedding"].values).astype(float)
     except Exception as exc:
-        raise RuntimeError("Error converting embeddings to matrix: " + str(exc)) from exc
+        raise RuntimeError(
+            "Error converting embeddings to matrix: " + str(exc)
+        ) from exc
 
     reducer = umap.UMAP(
         n_components=3,
@@ -988,6 +1235,7 @@ def plotly_umap_3d_combined(
         text_col = "word"
 
     if text_col and text_col != "word":
+
         def _wrap_text(text_value: object) -> str:
             text = str(text_value)
             if len(text) > int(max_chars):
@@ -1035,7 +1283,9 @@ def plotly_umap_3d_combined(
 
     # Set title
     if title is None:
-        fig.update_layout(title=f"3D UMAP - Combined DV & BOC Embeddings ({len(df)} cases)")
+        fig.update_layout(
+            title=f"3D UMAP - Combined DV & BOC Embeddings ({len(df)} cases)"
+        )
     else:
         fig.update_layout(title=title)
 
@@ -1060,6 +1310,18 @@ def plotly_umap_3d_combined(
 
 
 def run_case_eda(case_type: str, base_dir: Path | None = None) -> None:
+    """Regenerate the full EDA figure set for one case type into `eda_viz/`.
+
+    Loads the labelled EDA-view CSV, then runs, in order: class distribution, temporal
+    (per-year, drift), text-length, word/bigram/trigram frequency, TF-IDF (bigram and trigram),
+    tribunal breakdown, and — if a `juiz_relator` column is present — judge-gender breakdown.
+    Every figure is saved as a PNG under `eda_viz/{domestic_violence,breach_of_contract}/...`;
+    nothing is returned or displayed interactively.
+
+    Args:
+        case_type: "dv" or "boc".
+        base_dir: Repository root. Defaults to `get_project_root()`.
+    """
     base_dir = base_dir or get_project_root()
     schema = get_case_schema(case_type)
 

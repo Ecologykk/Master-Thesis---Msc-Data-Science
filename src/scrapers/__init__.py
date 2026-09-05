@@ -1,5 +1,4 @@
-"""
-Legal Document Scrapers Package
+"""Legal Document Scrapers Package.
 
 This package provides specialized scrapers for extracting legal documents from
 Portuguese courts, avaiable publicly in dgsi.pt.
@@ -16,8 +15,8 @@ Transparency Note: This code was optimized and polished using AI assistance(main
 Date: October 13th 2025
 """
 
-from .domestic_violence_scraper import DomesticViolenceScraper
 from .contract_breach_scraper import ContractBreachScraper
+from .domestic_violence_scraper import DomesticViolenceScraper
 
 __all__ = ["DomesticViolenceScraper", "ContractBreachScraper"]
 __version__ = "1.0.0"

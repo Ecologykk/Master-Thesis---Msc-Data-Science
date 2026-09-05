@@ -1,6 +1,7 @@
-import pandas as pd
 import re
 from pathlib import Path
+
+import pandas as pd
 
 """ Simple functions to assist in manually solving problematic cases in the dataset. Since these cases are few, we can handle them with specific rules. 
     We go to each case url, check the decision in the text, 
@@ -8,8 +9,17 @@ from pathlib import Path
 
 
 def extrair_com_snippets(texto_completo, snippet_inicio, snippet_fim):
-    """
-    Extrai decisão usando snippets de início e fim fornecidos manualmente
+    """Extrai a decisão de um texto usando snippets de início e fim fornecidos manualmente.
+
+    Args:
+        texto_completo (str): Texto integral do acórdão. Se for NaN, devolve None.
+        snippet_inicio (str): Excerto literal que marca o início da decisão.
+        snippet_fim (str): Excerto literal que marca o fim da decisão.
+
+    Returns:
+        str or None: A decisão extraída (incluindo os snippets de início e
+            fim), ou None se os snippets não forem encontrados no texto ou
+            ocorrer um erro durante a extração.
     """
     if pd.isna(texto_completo):
         return None
@@ -30,7 +40,7 @@ def extrair_com_snippets(texto_completo, snippet_inicio, snippet_fim):
             decisao_completa = snippet_inicio + match.group(1) + snippet_fim
             return decisao_completa.strip()
         else:
-            print(f"❌ Snippets não encontrados no texto")
+            print("❌ Snippets não encontrados no texto")
             return None
 
     except Exception as e:
@@ -39,8 +49,24 @@ def extrair_com_snippets(texto_completo, snippet_inicio, snippet_fim):
 
 
 def processar_casos_manualmente_simples(df_casos_problematicos):
-    """
-    Interface simplificada para processamento manual dos 14 casos
+    """Interface interativa de linha de comandos para resolver manualmente casos problemáticos.
+
+    Para cada caso do DataFrame, mostra a URL, a decisão conhecida e um
+    preview do final do texto integral, pede ao utilizador os snippets de
+    início/fim da decisão (ou 'skip' para saltar o caso), extrai a decisão
+    com `extrair_com_snippets` e, após confirmação do utilizador, grava o
+    resultado na coluna 'decisao_extraida_do_texto_integral' de uma cópia do
+    DataFrame.
+
+    Args:
+        df_casos_problematicos (pandas.DataFrame): Casos a rever manualmente.
+            Deve conter as colunas 'url', 'decisao', 'tribunal' e
+            'texto_integral_completo'.
+
+    Returns:
+        pandas.DataFrame: Cópia do DataFrame de entrada com a coluna
+            'decisao_extraida_do_texto_integral' preenchida para os casos
+            confirmados pelo utilizador.
     """
     print("🚀 PROCESSAMENTO MANUAL DOS CASOS PROBLEMÁTICOS")
     print("=" * 60)
@@ -65,7 +91,7 @@ def processar_casos_manualmente_simples(df_casos_problematicos):
         # Mostrar preview do final do texto
         texto_completo = caso["texto_integral_completo"]
         if pd.notna(texto_completo) and len(texto_completo) > 500:
-            print(f"\n📝 Preview do final do texto (últimos 500 caracteres):")
+            print("\n📝 Preview do final do texto (últimos 500 caracteres):")
             print("-" * 50)
             print("..." + texto_completo[-500:])
             print("-" * 50)
@@ -145,7 +171,7 @@ def processar_casos_manualmente_simples(df_casos_problematicos):
             print(f"❌ Erro: {e}")
             continue
 
-    print(f"\n📊 RESUMO FINAL:")
+    print("\n📊 RESUMO FINAL:")
     print(f"✅ Casos processados: {casos_processados}")
     print(f"⏭️ Casos restantes: {len(df_casos_problematicos) - casos_processados}")
     print(
@@ -162,6 +188,7 @@ def processar_casos_manualmente_simples(df_casos_problematicos):
 if __name__ == "__main__":
 
     def main():
+        """Ponto de entrada do script: lê o CSV de casos problemáticos, processa-os interativamente e grava o resultado."""
         type_case = (
             input(
                 "Digite o tipo de caso ('dv' para Violência Doméstica, 'ic' para Incumprimento de Contratos): "

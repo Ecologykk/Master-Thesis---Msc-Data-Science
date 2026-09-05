@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
-test_single_case.py
-===================
+"""Test a single case from the old logs to see if current thinking differs.
 
-Test a single case from the old logs to see if current thinking differs.
+Standalone smoke-test script: builds a zero-shot DV prompt for one hardcoded
+sample case and runs it through `OllamaClient.chat_with_validation`, printing
+the parsed response and the path of the resulting trace log.
 """
 
 import sys
@@ -14,7 +14,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from modeling.llms.client import OllamaClient, InferenceTraceGateway
 from modeling.llms.prompts import build_zero_shot_prompt
-from modeling.llms.config import OLLAMA_MODELS, LABEL_OUTPUT_NAMES, OLLAMA_DETERMINISTIC_OPTIONS
+from modeling.llms.config import (
+    OLLAMA_MODELS,
+    LABEL_OUTPUT_NAMES,
+    OLLAMA_DETERMINISTIC_OPTIONS,
+)
 
 client = OllamaClient()
 trace_gateway = InferenceTraceGateway()
@@ -32,13 +36,13 @@ A defesa não apresentou argumentos suficientemente robustos para reverter a dec
 print("=" * 80)
 print("TESTING SINGLE DV CASE")
 print("=" * 80)
-print(f"\nCase ID: 299/23.4SXLSB.L1-5")
-print(f"Case Type: dv")
-print(f"\nBuilding prompt...")
+print("\nCase ID: 299/23.4SXLSB.L1-5")
+print("Case Type: dv")
+print("\nBuilding prompt...")
 
 messages = build_zero_shot_prompt("dv", "299/23.4SXLSB.L1-5", sample_text)
 
-print(f"Sending to Ollama with format='json' and deterministic options...")
+print("Sending to Ollama with format='json' and deterministic options...")
 print(f"  temperature={OLLAMA_DETERMINISTIC_OPTIONS['temperature']}")
 print(f"  top_k={OLLAMA_DETERMINISTIC_OPTIONS['top_k']}")
 print(f"  seed={OLLAMA_DETERMINISTIC_OPTIONS['seed']}")

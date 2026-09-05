@@ -1,8 +1,4 @@
-"""
-train.py
-========
-
-Training pipeline for the Legal BERTimbau classification head.
+"""train.py: training pipeline for the Legal BERTimbau classification head.
 
 Architecture
 ------------
@@ -45,6 +41,7 @@ from features import (
 )
 
 import sys
+
 _eval_dir = str(Path(__file__).resolve().parents[2] / "evaluation")
 if _eval_dir not in sys.path:
     sys.path.insert(0, _eval_dir)
@@ -61,42 +58,41 @@ L1_LAMBDA = 0.0
 EARLY_STOPPING_PATIENCE = 10
 
 # --- BERT fine-tuning ---
-BERT_LR = 5e-6              # reduced from 1e-5; slower learning → wider window before memorization
-BERT_EPOCHS = 20            # was 5; allow full learning curve with early stopping
-BERT_BATCH_SIZE = 4         # kept for legacy MLP-style loops
-BERT_DROPOUT = 0.3          # bumped from 0.2; stronger regularization for small datasets
-BERT_WEIGHT_DECAY = 0.05    # increased from 0.01; stronger L2 penalty against memorization
-BERT_LABEL_SMOOTHING = 0.1  # prevents overconfident predictions; helps BOC minority classes
-BERT_VAL_RATIO = 0.15       # last 15 % of chronologically sorted train set used for val / early stopping
-BERT_PATIENCE = 7          # patience epochs for val-loss early stopping
-BERT_EMA_ALPHA = 0.3        # EMA smoothing factor for val-loss early stopping signal
-BERT_FROZEN_LAYERS = 20     # freeze layers 0-19, fine-tune layers 20-23 (top 4) + head
-BERT_MAX_WINDOWS = 16       # cap windows per document; equally-spaced if exceeded
-BERT_WINDOW_BATCH = 16     # windows per mini-batch through the unfrozen layers
-BERT_WARMUP_RATIO = 0.10    # linear warmup over first 10 % of total training steps
-BERT_GRAD_CLIP = 1.0        # max gradient norm; standard for BERT fine-tuning
+BERT_LR = 5e-6  # reduced from 1e-5; slower learning → wider window before memorization
+BERT_EPOCHS = 20  # was 5; allow full learning curve with early stopping
+BERT_BATCH_SIZE = 4  # kept for legacy MLP-style loops
+BERT_DROPOUT = 0.3  # bumped from 0.2; stronger regularization for small datasets
+BERT_WEIGHT_DECAY = (
+    0.05  # increased from 0.01; stronger L2 penalty against memorization
+)
+BERT_LABEL_SMOOTHING = (
+    0.1  # prevents overconfident predictions; helps BOC minority classes
+)
+BERT_VAL_RATIO = (
+    0.15  # last 15 % of chronologically sorted train set used for val / early stopping
+)
+BERT_PATIENCE = 7  # patience epochs for val-loss early stopping
+BERT_EMA_ALPHA = 0.3  # EMA smoothing factor for val-loss early stopping signal
+BERT_FROZEN_LAYERS = 20  # freeze layers 0-19, fine-tune layers 20-23 (top 4) + head
+BERT_MAX_WINDOWS = 16  # cap windows per document; equally-spaced if exceeded
+BERT_WINDOW_BATCH = 16  # windows per mini-batch through the unfrozen layers
+BERT_WARMUP_RATIO = 0.10  # linear warmup over first 10 % of total training steps
+BERT_GRAD_CLIP = 1.0  # max gradient norm; standard for BERT fine-tuning
 
 DEFAULT_N_SPLITS = 5
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[3] / "data/models/dl"
 
 
-
-
-
 class LegalBertClassifier(nn.Module):
     """Small MLP head trained on PCA-reduced frozen BERT embeddings.
 
-    Parameters
-    ----------
-    pca_dim : int
-        Number of PCA components (inferred from fitted pipeline at train time).
-    output_dim : int
-        1  → binary task (BCEWithLogitsLoss)
-        >1 → multi-class task (CrossEntropyLoss)
-    hidden_dim : int
-        Width of the single hidden layer.
-    dropout_prob : float
-        Dropout probability applied after the hidden activation.
+    Args:
+        pca_dim: Number of PCA components (inferred from the fitted pipeline
+            at train time).
+        output_dim: 1 for a binary task (BCEWithLogitsLoss), >1 for a
+            multi-class task (CrossEntropyLoss).
+        hidden_dim: Width of the single hidden layer.
+        dropout_prob: Dropout probability applied after the hidden activation.
     """
 
     def __init__(
@@ -106,6 +102,7 @@ class LegalBertClassifier(nn.Module):
         hidden_dim: int = HIDDEN_DIM,
         dropout_prob: float = DROPOUT_PROB,
     ):
+        """Build the Linear → ReLU → Dropout → Linear head. See class docstring for Args."""
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(pca_dim, hidden_dim),
@@ -115,6 +112,14 @@ class LegalBertClassifier(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Compute classification logits for a batch of PCA-reduced embeddings.
+
+        Args:
+            x: Input tensor, shape (batch, pca_dim).
+
+        Returns:
+            Logits tensor, shape (batch, output_dim).
+        """
         return self.net(x)
 
 
@@ -131,17 +136,14 @@ class LegalBertForClassification(nn.Module):
     inside ``torch.no_grad()`` so their activations are never stored in the
     computational graph, reducing VRAM usage when processing many windows.
 
-    Parameters
-    ----------
-    n_classes : int
-        1  → binary task (BCEWithLogitsLoss, single logit)
-        >1 → multi-class task (CrossEntropyLoss)
-    dropout_prob : float
-        Dropout applied between the CLS representation and the classifier.
-    n_frozen_layers : int
-        Number of BERT encoder layers (0-indexed from the bottom) to freeze.
-        0 = train all layers (original behaviour).
-        20 = freeze layers 0-19, fine-tune layers 20-23 + head (top-4 plan).
+    Args:
+        n_classes: 1 for a binary task (BCEWithLogitsLoss, single logit), >1
+            for a multi-class task (CrossEntropyLoss).
+        dropout_prob: Dropout applied between the CLS representation and the
+            classifier.
+        n_frozen_layers: Number of BERT encoder layers (0-indexed from the
+            bottom) to freeze. 0 = train all layers (original behaviour).
+            20 = freeze layers 0-19, fine-tune layers 20-23 + head (top-4 plan).
     """
 
     def __init__(
@@ -150,8 +152,10 @@ class LegalBertForClassification(nn.Module):
         dropout_prob: float = BERT_DROPOUT,
         n_frozen_layers: int = 0,
     ):
+        """Load the pretrained encoder, attach the head, and freeze bottom layers. See class docstring for Args."""
         super().__init__()
         from transformers import AutoModel  # lazy import — only needed for BERT mode
+
         self.bert = AutoModel.from_pretrained(MODEL_NAME)
         hidden_size = self.bert.config.hidden_size  # 1024 for bert-large
         self.dropout = nn.Dropout(dropout_prob)
@@ -177,9 +181,13 @@ class LegalBertForClassification(nn.Module):
         computational graph.  A ``.detach()`` at the boundary ensures the
         gradient stops there and does not propagate into frozen parameters.
 
-        Returns
-        -------
-        torch.Tensor, shape (batch, hidden_size)
+        Args:
+            input_ids: Token id tensor, shape (batch, seq_len).
+            attention_mask: Attention mask tensor, shape (batch, seq_len).
+
+        Returns:
+            torch.Tensor, shape (batch, hidden_size) — the [CLS] token
+            representation for each window in the batch.
         """
         if self.n_frozen_layers == 0:
             outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
@@ -202,8 +210,22 @@ class LegalBertForClassification(nn.Module):
 
         return hidden[:, 0, :]  # [CLS] token
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        """Single-window forward pass — used by smoke tests and basic inference."""
+    def forward(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor
+    ) -> torch.Tensor:
+        """Single-window forward pass — used by smoke tests and basic inference.
+
+        Production inference instead uses ``get_cls_repr`` directly via the
+        sliding-window helpers (``_tokenize_sliding_window`` /
+        ``_forward_sliding_window``) to aggregate over multiple windows.
+
+        Args:
+            input_ids: Token id tensor, shape (batch, seq_len).
+            attention_mask: Attention mask tensor, shape (batch, seq_len).
+
+        Returns:
+            Logits tensor, shape (batch, n_classes).
+        """
         cls = self.get_cls_repr(input_ids, attention_mask)
         return self.classifier(self.dropout(cls))
 
@@ -234,9 +256,9 @@ def _build_criterion(
         classes = np.arange(N_CLASSES[case_type])
         weights = compute_class_weight("balanced", classes=classes, y=y_train)
         weight_tensor = torch.tensor(weights, dtype=torch.float32, device=device)
-        return nn.CrossEntropyLoss(weight=weight_tensor, label_smoothing=label_smoothing)
-
-
+        return nn.CrossEntropyLoss(
+            weight=weight_tensor, label_smoothing=label_smoothing
+        )
 
 
 def predict_from_logits(logits: torch.Tensor, is_binary: bool) -> np.ndarray:
@@ -265,7 +287,6 @@ def proba_from_logits(logits: torch.Tensor, is_binary: bool) -> np.ndarray:
         return torch.softmax(logits, dim=1).cpu().numpy()
 
 
-
 def _train_one_model(
     X_tr: np.ndarray,
     y_tr: np.ndarray,
@@ -285,7 +306,7 @@ def _train_one_model(
     architecture — it must accept ``(batch, pca_dim)`` float tensors and
     produce logits compatible with the loss inferred from *case_type*.
 
-    Returns
+    Returns:
     -------
     model : nn.Module  (best weights restored)
     val_loss_curve : list[float]  (one entry per completed epoch)
@@ -335,7 +356,9 @@ def _train_one_model(
             val_logits = model(X_val_t)
             val_loss = criterion(val_logits, y_val_t).item()
         val_loss_curve.append(val_loss)
-        epoch_bar.set_postfix(train_loss=f"{loss.item():.4f}", val_loss=f"{val_loss:.4f}")
+        epoch_bar.set_postfix(
+            train_loss=f"{loss.item():.4f}", val_loss=f"{val_loss:.4f}"
+        )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -363,7 +386,7 @@ def _tokenize_sliding_window(
     exceeds ``max_windows``, equally-spaced indices are selected so the entire
     document length is represented (beginning, middle, and end).
 
-    Returns
+    Returns:
     -------
     input_ids     : LongTensor  (n_windows, 512)
     attention_mask: LongTensor  (n_windows, 512)
@@ -378,7 +401,7 @@ def _tokenize_sliding_window(
         padding="max_length",
         return_tensors="pt",
     )
-    input_ids = enc["input_ids"]       # (n_windows, 512)
+    input_ids = enc["input_ids"]  # (n_windows, 512)
     attention_mask = enc["attention_mask"]
 
     n_windows = input_ids.shape[0]
@@ -403,7 +426,7 @@ def _forward_sliding_window(
     The [CLS] representation of each window is collected, mean-pooled into a
     single document vector, then passed through the classification head.
 
-    Returns
+    Returns:
     -------
     logits : FloatTensor, shape (1, n_classes)
     """
@@ -421,7 +444,7 @@ def _forward_sliding_window(
         all_cls.append(cls)
 
     doc_repr = torch.cat(all_cls, dim=0).mean(dim=0, keepdim=True)  # (1, hidden)
-    return model.classifier(model.dropout(doc_repr))                 # (1, n_classes)
+    return model.classifier(model.dropout(doc_repr))  # (1, n_classes)
 
 
 def _train_one_bert_model(
@@ -471,7 +494,7 @@ def _train_one_bert_model(
         "ema_loss" (default) : EMA-smoothed val loss — ``ema = alpha * val + (1-alpha) * ema``
         "loss"               : raw val loss, no smoothing
 
-    Returns
+    Returns:
     -------
     model          : LegalBertForClassification  (best checkpoint by val loss)
     train_loss_curve : list[float]  (one entry per epoch)
@@ -506,7 +529,9 @@ def _train_one_bert_model(
         n_frozen_layers=n_frozen_layers,
     ).to(device)
 
-    criterion = _build_criterion(case_type, y_tr, device, label_smoothing=label_smoothing)
+    criterion = _build_criterion(
+        case_type, y_tr, device, label_smoothing=label_smoothing
+    )
 
     # Only optimise trainable parameters (frozen params are excluded)
     trainable_params = [p for p in model.parameters() if p.requires_grad]
@@ -567,7 +592,9 @@ def _train_one_bert_model(
             scheduler.step()
             train_loss_sum += loss.item()
             doc_count += 1
-            doc_bar.set_postfix(loss=f"{loss.item():.4f}", avg=f"{train_loss_sum / doc_count:.4f}")
+            doc_bar.set_postfix(
+                loss=f"{loss.item():.4f}", avg=f"{train_loss_sum / doc_count:.4f}"
+            )
 
         # --- Validation pass ---
         model.eval()
@@ -580,7 +607,9 @@ def _train_one_bert_model(
                 if IS_BINARY[case_type]:
                     label_t = torch.tensor([[float(label)]], device=device)
                 else:
-                    label_t = torch.tensor([int(label)], dtype=torch.long, device=device)
+                    label_t = torch.tensor(
+                        [int(label)], dtype=torch.long, device=device
+                    )
                 logits = _forward_sliding_window(
                     model, input_ids, attention_mask, window_mbatch, use_amp
                 )
@@ -593,13 +622,19 @@ def _train_one_bert_model(
         val_loss_curve.append(val_loss)
 
         if early_stop_on == "ema_loss":
-            ema_loss = val_loss if ema_loss is None else ema_alpha * val_loss + (1.0 - ema_alpha) * ema_loss
+            ema_loss = (
+                val_loss
+                if ema_loss is None
+                else ema_alpha * val_loss + (1.0 - ema_alpha) * ema_loss
+            )
             stop_signal = ema_loss
         else:
             stop_signal = val_loss
 
         epoch_bar.set_postfix(
-            tr=f"{epoch_train_avg:.4f}", val=f"{val_loss:.4f}", stop=f"{stop_signal:.4f}",
+            tr=f"{epoch_train_avg:.4f}",
+            val=f"{val_loss:.4f}",
+            stop=f"{stop_signal:.4f}",
         )
 
         if stop_signal < best_val_loss:
@@ -634,6 +669,20 @@ def plot_loss_curves(
     otherwise at the lowest val loss.
 
     Saves to {output_dir}/{case_type}/plots/{run_name}_{case_type}_loss_curves.png.
+
+    Args:
+        train_losses: Per-epoch training loss values.
+        val_losses: Per-epoch validation loss values.
+        case_type: "dv" or "boc".
+        run_name: Optional run tag used in the filename and plot title.
+        output_dir: Root model directory; the plot is saved under
+            ``{output_dir}/{case_type}/plots/``.
+        val_f1_curve: Optional per-epoch validation macro-F1 values; when
+            given, a second panel is added and the best-epoch marker uses F1
+            instead of loss.
+
+    Returns:
+        Path to the saved PNG file.
     """
     import matplotlib.pyplot as plt
 
@@ -644,8 +693,16 @@ def plot_loss_curves(
     plot_path = plots_dir / f"{prefix}{case_type}_loss_curves.png"
 
     epochs = range(1, len(val_losses) + 1)
-    best_epoch = (int(np.argmax(val_f1_curve)) + 1) if val_f1_curve else (int(np.argmin(val_losses)) + 1)
-    best_epoch_label = f"Best F1 epoch ({best_epoch})" if val_f1_curve else f"Best val loss epoch ({best_epoch})"
+    best_epoch = (
+        (int(np.argmax(val_f1_curve)) + 1)
+        if val_f1_curve
+        else (int(np.argmin(val_losses)) + 1)
+    )
+    best_epoch_label = (
+        f"Best F1 epoch ({best_epoch})"
+        if val_f1_curve
+        else f"Best val loss epoch ({best_epoch})"
+    )
 
     n_panels = 2 if val_f1_curve else 1
     fig, axes = plt.subplots(n_panels, 1, figsize=(8, 4 * n_panels), sharex=True)
@@ -654,15 +711,25 @@ def plot_loss_curves(
 
     axes[0].plot(epochs, train_losses, label="Train loss", marker="o", markersize=4)
     axes[0].plot(epochs, val_losses, label="Val loss", marker="s", markersize=4)
-    axes[0].axvline(best_epoch, color="gray", linestyle="--", alpha=0.7,
-                    label=best_epoch_label)
+    axes[0].axvline(
+        best_epoch, color="gray", linestyle="--", alpha=0.7, label=best_epoch_label
+    )
     axes[0].set_ylabel("Loss")
-    axes[0].set_title(f"{case_type.upper()} — Training Curves ({run_name or 'training'})")
+    axes[0].set_title(
+        f"{case_type.upper()} — Training Curves ({run_name or 'training'})"
+    )
     axes[0].legend()
     axes[0].grid(True, alpha=0.3)
 
     if val_f1_curve:
-        axes[1].plot(epochs, val_f1_curve, label="Val macro-F1", color="green", marker="^", markersize=4)
+        axes[1].plot(
+            epochs,
+            val_f1_curve,
+            label="Val macro-F1",
+            color="green",
+            marker="^",
+            markersize=4,
+        )
         axes[1].axvline(best_epoch, color="gray", linestyle="--", alpha=0.7)
         axes[1].set_xlabel("Epoch")
         axes[1].set_ylabel("Macro-F1")
@@ -692,29 +759,27 @@ def run_timeseries_cv(
     Temporal ordering is enforced by sorting all data by date before splitting.
     Class weighting is computed from each training fold independently.
 
-    Parameters
-    ----------
-    X : np.ndarray, shape (n, EMBED_DIM)
-    y : np.ndarray of int, shape (n,)
-    dates : pd.Series of datetime
-    case_type : str — "dv" or "boc"
-    n_splits : int
-    device : torch.device or None (auto-selected)
+    Args:
+        X: Frozen BERT embeddings, shape (n, EMBED_DIM).
+        y: Integer-encoded labels, shape (n,).
+        dates: Decision dates aligned with X/y, used to sort chronologically.
+        case_type: "dv" or "boc".
+        n_splits: Number of TimeSeriesSplit folds.
+        device: Torch device (auto-selected if None).
 
-    Returns
-    -------
-    list of dicts, one per fold:
-        {
-          'fold'            : int,
-          'y_true'          : np.ndarray,
-          'y_pred'          : np.ndarray,
-          'pca_n_components': int,
-          'train_size'      : int,
-          'val_size'        : int,
-          'val_loss_curve'  : list[float],
-        }
+    Returns:
+        list of dicts, one per fold:
+            {
+              'fold'            : int,
+              'y_true'          : np.ndarray,
+              'y_pred'          : np.ndarray,
+              'pca_n_components': int,
+              'train_size'      : int,
+              'val_size'        : int,
+              'val_loss_curve'  : list[float],
+            }
     """
-    import pandas as pd  
+    import pandas as pd
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -727,11 +792,12 @@ def run_timeseries_cv(
     tscv = TimeSeriesSplit(n_splits=n_splits)
     fold_results = []
 
-    for fold_idx, (train_idx, val_idx) in enumerate(tqdm(tscv.split(X), total=n_splits, desc="CV folds", unit="fold")):
+    for fold_idx, (train_idx, val_idx) in enumerate(
+        tqdm(tscv.split(X), total=n_splits, desc="CV folds", unit="fold")
+    ):
         X_tr_raw, X_val_raw = X[train_idx], X[val_idx]
         y_tr, y_val = y[train_idx], y[val_idx]
 
-        
         fold_pipeline = clone(build_feature_pipeline())
         X_tr = fold_pipeline.fit_transform(X_tr_raw).astype(np.float32)
         X_val = fold_pipeline.transform(X_val_raw).astype(np.float32)
@@ -739,8 +805,13 @@ def run_timeseries_cv(
         pca_dim = fold_pipeline.named_steps["pca"].n_components_
 
         model, val_loss_curve = _train_one_model(
-            X_tr, y_tr, X_val, y_val,
-            pca_dim=pca_dim, case_type=case_type, device=device,
+            X_tr,
+            y_tr,
+            X_val,
+            y_val,
+            pca_dim=pca_dim,
+            case_type=case_type,
+            device=device,
         )
 
         with torch.no_grad():
@@ -766,8 +837,6 @@ def run_timeseries_cv(
     return fold_results
 
 
-
-
 def train_final_model(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -780,12 +849,18 @@ def train_final_model(
     use of all available training data. Regularisation (Dropout, L2, L1) guards
     against overfitting.
 
-    Returns
-    -------
-    fitted_pipeline : sklearn.pipeline.Pipeline
-    fitted_model    : LegalBertClassifier (eval mode)
+    Args:
+        X_train: Frozen BERT embeddings, shape (n, EMBED_DIM).
+        y_train: Integer-encoded labels, shape (n,).
+        case_type: "dv" or "boc".
+        device: Torch device (auto-selected if None).
+
+    Returns:
+        Tuple of (fitted_pipeline, fitted_model): a fitted
+        ``sklearn.pipeline.Pipeline`` and a ``LegalBertClassifier`` in eval
+        mode.
     """
-    from sklearn.pipeline import Pipeline  
+    from sklearn.pipeline import Pipeline
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -836,6 +911,18 @@ def run_timeseries_cv_bert(
     Requires CUDA — delegates the check to _train_one_bert_model.
     Returns the same fold-result dict structure as run_timeseries_cv
     (pca_n_components is None since no PCA is used here).
+
+    Args:
+        texts: Raw document texts, aligned with y and dates.
+        y: Integer-encoded labels, shape (n,).
+        dates: Decision dates aligned with texts/y, used to sort chronologically.
+        case_type: "dv" or "boc".
+        n_splits: Number of TimeSeriesSplit folds.
+        device: Torch device (auto-selected if None).
+
+    Returns:
+        list of per-fold result dicts; see ``run_timeseries_cv`` for the
+        dict shape (``pca_n_components`` is always None here).
     """
     import pandas as pd
 
@@ -857,8 +944,12 @@ def run_timeseries_cv_bert(
         y_tr, y_val = y_sorted[train_idx], y_sorted[val_idx]
 
         model, _, val_loss_curve = _train_one_bert_model(
-            texts_tr, y_tr, texts_val, y_val,
-            case_type=case_type, device=device,
+            texts_tr,
+            y_tr,
+            texts_val,
+            y_val,
+            case_type=case_type,
+            device=device,
         )
 
         # Collect predictions using sliding-window aggregation
@@ -872,21 +963,27 @@ def run_timeseries_cv_bert(
                     text, tokenizer, BERT_MAX_WINDOWS, device
                 )
                 logits = _forward_sliding_window(
-                    model, input_ids, attention_mask, BERT_WINDOW_BATCH, device.type == "cuda"
+                    model,
+                    input_ids,
+                    attention_mask,
+                    BERT_WINDOW_BATCH,
+                    device.type == "cuda",
                 )
                 all_logits.append(logits.cpu())
         logits_cat = torch.cat(all_logits, dim=0)
         y_pred = predict_from_logits(logits_cat, IS_BINARY[case_type])
 
-        fold_results.append({
-            "fold": fold_idx,
-            "y_true": y_val,
-            "y_pred": y_pred,
-            "pca_n_components": None,
-            "train_size": len(train_idx),
-            "val_size": len(val_idx),
-            "val_loss_curve": val_loss_curve,
-        })
+        fold_results.append(
+            {
+                "fold": fold_idx,
+                "y_true": y_val,
+                "y_pred": y_pred,
+                "pca_n_components": None,
+                "train_size": len(train_idx),
+                "val_size": len(val_idx),
+                "val_loss_curve": val_loss_curve,
+            }
+        )
         print(
             f"  BERT Fold {fold_idx}: train={len(train_idx)}, val={len(val_idx)}, "
             f"best_val_loss={min(val_loss_curve):.4f}"
@@ -915,9 +1012,23 @@ def train_final_bert_model(
 
     CUDA required — raises RuntimeError on CPU.
 
-    Returns
-    -------
-    fitted_model : LegalBertForClassification (eval mode)
+    Args:
+        texts_train: Raw document texts for the full training set.
+        y_train: Integer-encoded labels, shape (n,).
+        case_type: "dv" or "boc".
+        device: Torch device (auto-selected if None).
+        n_frozen_layers: Number of bottom BERT encoder layers to freeze.
+        max_windows: Cap on sliding windows per document.
+        window_mbatch: Window mini-batch size through the unfrozen layers.
+        lr: Learning rate for the AdamW optimizer.
+        warmup_ratio: Fraction of total steps used for linear LR warmup.
+        grad_clip: Max gradient norm for gradient clipping.
+
+    Returns:
+        The fine-tuned ``LegalBertForClassification`` in eval mode.
+
+    Raises:
+        RuntimeError: If ``device`` is not a CUDA device.
     """
     from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
@@ -1011,6 +1122,17 @@ def save_model(
     -----
     {output_dir}/{case_type}/feature_pipeline.joblib
     {output_dir}/{case_type}/classifier.pt
+
+    Args:
+        fitted_pipeline: Fitted ``sklearn.pipeline.Pipeline`` (scaler + PCA).
+        fitted_model: Trained ``LegalBertClassifier``.
+        case_type: "dv" or "boc".
+        output_dir: Root model directory (parent of the case_type
+            subdirectory) to write into.
+        run_name: Optional prefix for the saved filenames (e.g. "v1").
+
+    Returns:
+        The case_type model directory the artefacts were written into.
     """
     model_dir = Path(output_dir) / case_type
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -1051,6 +1173,16 @@ def save_bert_model(
     File
     ----
     {output_dir}/{case_type}/{run_name}_bert_classifier.pt
+
+    Args:
+        fitted_model: Fine-tuned ``LegalBertForClassification``.
+        case_type: "dv" or "boc".
+        output_dir: Root model directory (parent of the case_type
+            subdirectory) to write into.
+        run_name: Optional prefix for the saved filename (e.g. "bert_v1").
+
+    Returns:
+        The case_type model directory the artefact was written into.
     """
     model_dir = Path(output_dir) / case_type
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -1110,15 +1242,13 @@ def _run_smoke_test() -> None:
 
         # ── Cross-validation ──────────────────────────────────────────────
         print("  Running 3-fold TimeSeriesSplit CV...")
-        cv_results = run_timeseries_cv(
-            X, y, dates, case_type=case_type, n_splits=3
-        )
+        cv_results = run_timeseries_cv(X, y, dates, case_type=case_type, n_splits=3)
         assert len(cv_results) == 3, "Expected 3 CV folds"
         for r in cv_results:
             assert r["y_pred"].shape == r["y_true"].shape, "Shape mismatch in fold"
-            assert np.issubdtype(r["y_pred"].dtype, np.integer), (
-                f"y_pred must be integer, got {r['y_pred'].dtype}"
-            )
+            assert np.issubdtype(
+                r["y_pred"].dtype, np.integer
+            ), f"y_pred must be integer, got {r['y_pred'].dtype}"
         print(f"  CV passed — {len(cv_results)} folds OK")
 
         # ── Final model ───────────────────────────────────────────────────
@@ -1132,15 +1262,18 @@ def _run_smoke_test() -> None:
         print("  Testing save_model (temp dir)...")
         with tempfile.TemporaryDirectory() as tmp:
             model_dir = save_model(
-                fitted_pipeline, fitted_model,
-                case_type=case_type, output_dir=Path(tmp),run_name="smoke_test"
+                fitted_pipeline,
+                fitted_model,
+                case_type=case_type,
+                output_dir=Path(tmp),
+                run_name="smoke_test",
             )
-            assert (model_dir / "smoke_test_feature_pipeline.joblib").exists(), (
-                "smoke_test_feature_pipeline.joblib not found after save"
-            )
-            assert (model_dir / "smoke_test_classifier.pt").exists(), (
-                "smoke_test_classifier.pt not found after save"
-            )
+            assert (
+                model_dir / "smoke_test_feature_pipeline.joblib"
+            ).exists(), "smoke_test_feature_pipeline.joblib not found after save"
+            assert (
+                model_dir / "smoke_test_classifier.pt"
+            ).exists(), "smoke_test_classifier.pt not found after save"
         print("  Save/load round-trip OK\n")
 
     print("Smoke test passed.")
@@ -1159,6 +1292,27 @@ def main(
     run_name: str = None,
     early_stop_on: str = "ema_loss",
 ) -> None:
+    """Run the CLI training pipeline: CV, final-model fit, and artefact saving.
+
+    In "mlp" mode, loads frozen embeddings, runs TimeSeriesSplit CV with the
+    MLP head, trains the final model on the full training set, and saves the
+    pipeline + classifier. In "bert" mode, loads raw texts, fine-tunes BERT
+    with a temporal train/val split and early stopping, then saves the model
+    and a loss-curve plot.
+
+    Args:
+        case_type: "dv" or "boc".
+        mode: "mlp" (frozen embeddings + MLP head) or "bert" (full BERT
+            fine-tuning; requires CUDA).
+        n_splits: Number of TimeSeriesSplit CV folds (mlp mode only).
+        output_dir: Root model directory to save artefacts into.
+        run_name: Optional prefix for saved filenames.
+        early_stop_on: Early stopping signal for BERT mode: "ema_loss"
+            (EMA-smoothed val loss) or "loss" (raw val loss).
+
+    Raises:
+        ValueError: If ``mode`` is not "mlp" or "bert".
+    """
     from sklearn.metrics import f1_score, matthews_corrcoef
 
     print(f"\n{'=' * 60}")
@@ -1179,22 +1333,36 @@ def main(
         X, y_raw, dates, _ = load_split_data(case_type, split="train")
         y = encode_labels(y_raw, case_type)
         unique, counts = np.unique(y, return_counts=True)
-        print(f"  {len(X)} cases  |  class distribution: {dict(zip(unique.tolist(), counts.tolist()))}")
+        print(
+            f"  {len(X)} cases  |  class distribution: {dict(zip(unique.tolist(), counts.tolist()))}"
+        )
 
         print(f"\nRunning {n_splits}-fold TimeSeriesSplit CV...")
-        cv_results = run_timeseries_cv(X, y, dates, case_type=case_type, n_splits=n_splits, device=device)
+        cv_results = run_timeseries_cv(
+            X, y, dates, case_type=case_type, n_splits=n_splits, device=device
+        )
 
         print("\nCV Summary:")
         for r in cv_results:
-            macro_f1 = f1_score(r["y_true"], r["y_pred"], average="macro", zero_division=0)
+            macro_f1 = f1_score(
+                r["y_true"], r["y_pred"], average="macro", zero_division=0
+            )
             mcc = matthews_corrcoef(r["y_true"], r["y_pred"])
             print(f"  Fold {r['fold']}: macro_F1={macro_f1:.4f}  MCC={mcc:.4f}")
 
         print("\nTraining final model on full training set...")
-        fitted_pipeline, fitted_model = train_final_model(X, y, case_type=case_type, device=device)
+        fitted_pipeline, fitted_model = train_final_model(
+            X, y, case_type=case_type, device=device
+        )
 
         print("\nSaving model artifacts...")
-        save_model(fitted_pipeline, fitted_model, case_type=case_type, output_dir=output_dir, run_name=run_name)
+        save_model(
+            fitted_pipeline,
+            fitted_model,
+            case_type=case_type,
+            output_dir=output_dir,
+            run_name=run_name,
+        )
 
     elif mode == "bert":
         print(
@@ -1209,21 +1377,34 @@ def main(
         )
         unique_tr, counts_tr = np.unique(y_tr, return_counts=True)
         unique_val, counts_val = np.unique(y_val, return_counts=True)
-        print(f"  Train: {len(texts_tr)} cases  |  class dist: {dict(zip(unique_tr.tolist(), counts_tr.tolist()))}")
-        print(f"  Val:   {len(texts_val)} cases  |  class dist: {dict(zip(unique_val.tolist(), counts_val.tolist()))}")
+        print(
+            f"  Train: {len(texts_tr)} cases  |  class dist: {dict(zip(unique_tr.tolist(), counts_tr.tolist()))}"
+        )
+        print(
+            f"  Val:   {len(texts_val)} cases  |  class dist: {dict(zip(unique_val.tolist(), counts_val.tolist()))}"
+        )
 
         print("\nTraining BERT model with temporal val split + early stopping...")
         fitted_model, train_loss_curve, val_loss_curve = _train_one_bert_model(
-            texts_tr, y_tr, texts_val, y_val,
-            case_type=case_type, device=device,
+            texts_tr,
+            y_tr,
+            texts_val,
+            y_val,
+            case_type=case_type,
+            device=device,
             early_stop_on=early_stop_on,
         )
 
         print("\nSaving model artifacts...")
-        save_bert_model(fitted_model, case_type=case_type, output_dir=output_dir, run_name=run_name)
+        save_bert_model(
+            fitted_model, case_type=case_type, output_dir=output_dir, run_name=run_name
+        )
         plot_loss_curves(
-            train_loss_curve, val_loss_curve, case_type,
-            run_name=run_name, output_dir=output_dir,
+            train_loss_curve,
+            val_loss_curve,
+            case_type,
+            run_name=run_name,
+            output_dir=output_dir,
         )
 
     else:
@@ -1238,21 +1419,28 @@ if __name__ == "__main__":
     )
     parser.add_argument("--case_type", choices=["dv", "boc"], default=None)
     parser.add_argument(
-        "--mode", choices=["mlp", "bert"], default="mlp",
+        "--mode",
+        choices=["mlp", "bert"],
+        default="mlp",
         help="mlp: frozen embeddings + MLP head (CPU ok).  bert: full BERT fine-tuning (CUDA required).",
     )
     parser.add_argument("--n_splits", type=int, default=DEFAULT_N_SPLITS)
     parser.add_argument("--output_dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument(
-        "--run_name", type=str, default=None,
+        "--run_name",
+        type=str,
+        default=None,
         help="Name prefix for saved model files.",
     )
     parser.add_argument(
-        "--early_stop_on", choices=["ema_loss", "loss"], default="ema_loss",
+        "--early_stop_on",
+        choices=["ema_loss", "loss"],
+        default="ema_loss",
         help="Early stopping signal for BERT: 'ema_loss' (EMA-smoothed val loss) or 'loss' (raw val loss).",
     )
     parser.add_argument(
-        "--smoke_test", action="store_true",
+        "--smoke_test",
+        action="store_true",
         help="Run end-to-end smoke test with synthetic data (no real data required).",
     )
     args = parser.parse_args()
@@ -1262,4 +1450,11 @@ if __name__ == "__main__":
     else:
         if args.case_type is None:
             parser.error("--case_type is required unless --smoke_test is set")
-        main(args.case_type, args.mode, args.n_splits, args.output_dir, args.run_name, args.early_stop_on)
+        main(
+            args.case_type,
+            args.mode,
+            args.n_splits,
+            args.output_dir,
+            args.run_name,
+            args.early_stop_on,
+        )

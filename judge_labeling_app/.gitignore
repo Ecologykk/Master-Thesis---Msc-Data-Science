@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.streamlit/secrets*
+credentials/*.json
+!.streamlit/secrets.example.toml
+!credentials/judge_credentials.example.json
+env/*
+
+# Judge responses and identities are study-participant data about identifiable legal
+# professionals and must never be committed. See README.md for what was collected.
+reports/**/*.csv
+reports/**/*.ipynb

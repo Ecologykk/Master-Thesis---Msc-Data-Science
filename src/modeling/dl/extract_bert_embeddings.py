@@ -1,6 +1,4 @@
-"""
-extract_bert_embeddings.py
-==========================
+"""extract_bert_embeddings.py: extract fine-tuned document embeddings for visualisation.
 
 Extract document embeddings from a fine-tuned LegalBertForClassification model
 for UMAP visualisation and class-overlap analysis.
@@ -23,6 +21,14 @@ python extract_bert_embeddings.py --run_name bert_v4
 
 # Single case type
 python extract_bert_embeddings.py --case_type dv --run_name bert_v4
+
+Seeds are fixed and decoding is greedy (`temperature=0.0`, `top_k=1`,
+`seed=42`), so this script is deterministic on identical hardware. Results may
+still diverge slightly on different hardware: GPU floating-point reductions
+are non-associative and kernel selection, driver version and tensor-core
+availability all change the order of operations. Expect small differences in
+embeddings and occasional label flips on borderline cases. This does not
+indicate a bug.
 """
 
 import argparse
@@ -44,7 +50,7 @@ if str(_HERE) not in sys.path:
 from features import load_split_text_data
 from train import (
     BERT_MAX_WINDOWS,
-    BERT_WINDOW_MBATCH,
+    BERT_WINDOW_BATCH,
     DEFAULT_OUTPUT_DIR,
     LegalBertForClassification,
     _tokenize_sliding_window,
@@ -71,9 +77,16 @@ def _get_doc_embedding(
 ) -> np.ndarray:
     """Return mean-pooled CLS embedding for one document (before classifier head).
 
-    Returns
-    -------
-    np.ndarray, shape (hidden_size,), dtype float32 — 1024-dim for BERT-large.
+    Args:
+        model: Fine-tuned ``LegalBertForClassification``, in eval mode.
+        text: Raw document text.
+        tokenizer: HuggingFace tokenizer matching ``model``.
+        max_windows: Cap on sliding windows per document.
+        window_mbatch: Window mini-batch size through the encoder.
+        device: Torch device to run inference on.
+
+    Returns:
+        np.ndarray, shape (hidden_size,), dtype float32 — 1024-dim for BERT-large.
     """
     input_ids, attention_mask = _tokenize_sliding_window(
         text, tokenizer, max_windows, device
@@ -95,14 +108,22 @@ def extract_embeddings_for_split(
     tokenizer,
     device: torch.device,
     max_windows: int = BERT_MAX_WINDOWS,
-    window_mbatch: int = BERT_WINDOW_MBATCH,
+    window_mbatch: int = BERT_WINDOW_BATCH,
 ) -> pd.DataFrame:
     """Extract embeddings for all documents in one split.
 
-    Returns
-    -------
-    DataFrame with columns: n_processo, class_label,
-    texto_integral_sem_decisao, embedding, split.
+    Args:
+        case_type: "dv" or "boc".
+        split: "train" or "gold_test".
+        model: Fine-tuned ``LegalBertForClassification``, in eval mode.
+        tokenizer: HuggingFace tokenizer matching ``model``.
+        device: Torch device to run inference on.
+        max_windows: Cap on sliding windows per document.
+        window_mbatch: Window mini-batch size through the encoder.
+
+    Returns:
+        pd.DataFrame with columns: n_processo, class_label,
+        texto_integral_sem_decisao, embedding, split.
     """
     texts, y_raw, _, n_processo = load_split_text_data(case_type, split=split)
 
@@ -138,31 +159,34 @@ def extract_and_save(
 ) -> Path:
     """Load fine-tuned model, extract embeddings for all splits, save parquet.
 
-    Parameters
-    ----------
-    case_type  : "dv" or "boc"
-    run_name   : model version tag, e.g. "bert_v4"
-    model_dir  : root model artefact directory
-    output_dir : directory for the output parquet
-    device     : auto-selected if None
+    Args:
+        case_type: "dv" or "boc".
+        run_name: Model version tag, e.g. "bert_v4".
+        model_dir: Root model artefact directory.
+        output_dir: Directory for the output parquet.
+        device: Torch device (auto-selected if None).
 
-    Returns
-    -------
-    Path to the saved parquet file.
+    Returns:
+        Path to the saved parquet file.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print(f"\n[{case_type.upper()}] Loading fine-tuned model ({run_name}) ...")
-    model = load_bert_model(case_type, model_dir=model_dir, device=device, run_name=run_name)
+    model = load_bert_model(
+        case_type, model_dir=model_dir, device=device, run_name=run_name
+    )
     model.eval()
 
     from transformers import AutoTokenizer
-    model_name = getattr(model, "model_name", "stjiris/bert-large-portuguese-cased-legal-mlm-nli-sts-v1")
+
+    model_name = getattr(
+        model, "model_name", "stjiris/bert-large-portuguese-cased-legal-mlm-nli-sts-v1"
+    )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     max_windows = getattr(model, "max_windows", BERT_MAX_WINDOWS)
-    window_mbatch = getattr(model, "window_mbatch", BERT_WINDOW_MBATCH)
+    window_mbatch = getattr(model, "window_mbatch", BERT_WINDOW_BATCH)
 
     dfs: list[pd.DataFrame] = []
     for split in ("train", "gold_test"):
@@ -190,6 +214,7 @@ def extract_and_save(
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the embedding-extraction script."""
     parser = argparse.ArgumentParser(
         description="Extract fine-tuned BERT embeddings for UMAP visualisation."
     )

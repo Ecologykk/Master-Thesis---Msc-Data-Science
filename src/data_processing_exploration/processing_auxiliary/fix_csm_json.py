@@ -4,11 +4,22 @@ from pathlib import Path
 
 
 def extrair_tribunal_csm_json(json_file):
-    """
-    Extrai e atualiza o campo 'tribunal' diretamente no JSON do CSM.
-    Procura pelos padrões de Tribunais da Relação e STJ no texto integral.
-    """
+    """Extrai e atualiza o campo 'tribunal' diretamente no JSON do CSM.
 
+    Procura pelos padrões de Tribunais da Relação e STJ no texto integral
+    (cabeçalho e rodapé de cada caso), com fallback para deteção por nome de
+    cidade quando o padrão textual não é encontrado. Apenas processa itens
+    cujo campo 'tribunal' seja 'CSM', None ou vazio; grava o JSON atualizado
+    de volta no mesmo ficheiro.
+
+    Args:
+        json_file (str or Path): Caminho para o ficheiro JSON do CSM.
+
+    Returns:
+        tuple[int, int]: (casos_atualizados, casos_nao_identificados) — número
+            de casos aos quais foi atribuído um tribunal e número de casos em
+            que o tribunal não pôde ser identificado.
+    """
     # Padrões de tribunais
     cidades_tribunais = {
         "lisboa": "TRL",
@@ -31,7 +42,7 @@ def extrair_tribunal_csm_json(json_file):
     ]
 
     def extract_tribunal(text_section):
-        """Extrai TR/STJ do texto"""
+        """Extrai o código do tribunal (TR/STJ) de uma secção de texto."""
         for pattern in tribunal_patterns:
             match = re.search(pattern, text_section, re.IGNORECASE)
             if match:
@@ -61,7 +72,7 @@ def extrair_tribunal_csm_json(json_file):
         return None
 
     def extract_tribunal_by_city(text_section):
-        """Fallback: procura cidade"""
+        """Fallback: procura o nome da cidade na secção de texto."""
         text_lower = text_section.lower()
         for cidade, codigo in cidades_tribunais.items():
             if cidade in text_lower:
@@ -116,5 +127,5 @@ def extrair_tribunal_csm_json(json_file):
 
 # Usar
 extrair_tribunal_csm_json(
-    Path(f"./../../data/csm_violencia_domestica_20251029_131345.json")
+    Path("./../../data/csm_violencia_domestica_20251029_131345.json")
 )

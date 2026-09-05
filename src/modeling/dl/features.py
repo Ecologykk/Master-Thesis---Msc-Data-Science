@@ -1,8 +1,4 @@
-"""
-features.py
-===========
-
-Preprocessing pipeline for Legal BERTimbau frozen embeddings.
+"""features.py: preprocessing pipeline for Legal BERTimbau frozen embeddings.
 
 Provides:
   - load_split_data()        -- load embeddings + labels from parquet + split CSV
@@ -98,24 +94,26 @@ def load_split_data(
     ensure only cases that (a) have embeddings and (b) belong to the
     requested temporal split are returned.
 
-    Parameters
-    ----------
-    case_type : str
-        "dv" (Domestic Violence) or "boc" (Breach of Contract).
-    split : str
-        "train" or "gold_test". Gold test must only be used for final evaluation.
+    Args:
+        case_type: "dv" (Domestic Violence) or "boc" (Breach of Contract).
+        split: "train" or "gold_test". Gold test must only be used for final
+            evaluation.
 
-    Returns
-    -------
-    X : np.ndarray, shape (n_samples, EMBED_DIM=1024), dtype float32
-    y_raw : np.ndarray of str, shape (n_samples,)
-        Un-encoded string labels, e.g. "decisao_mantida".
-    dates : pd.Series of datetime, shape (n_samples,)
-        Decision dates — used for temporal ordering in TimeSeriesSplit.
-    n_processo : list[str]
-        Case identifiers aligned with rows of X / y_raw.
+    Returns:
+        Tuple of (X, y_raw, dates, n_processo):
+            X: np.ndarray, shape (n_samples, EMBED_DIM=1024), dtype float32.
+            y_raw: np.ndarray of str, shape (n_samples,) — un-encoded string
+                labels, e.g. "decisao_mantida".
+            dates: pd.Series of datetime, shape (n_samples,) — decision
+                dates, used for temporal ordering in TimeSeriesSplit.
+            n_processo: list[str] — case identifiers aligned with rows of
+                X / y_raw.
+
+    Raises:
+        ValueError: If ``case_type`` or ``split`` is not a recognised value.
+        RuntimeError: If no n_processo overlaps between the parquet embeddings
+            and the split CSV.
     """
-    
     # TODO: Remmeber to enforce consisten data types in the incoming parquet and csv,
     # Because as of now embeddigns came as strings and could not be loaded as float
     # E.g., ValueError: could not convert string to float: np.str_....
@@ -142,6 +140,7 @@ def load_split_data(
     sample = merged["embedding"].iloc[0]
     if isinstance(sample, (str, np.str_)):
         import json
+
         merged["embedding"] = merged["embedding"].apply(
             lambda s: json.loads(s) if isinstance(s, (str, np.str_)) else s
         )
@@ -164,19 +163,22 @@ def load_split_text_data(
     The split CSVs contain texto_integral_sem_decisao, data_acordao, and the
     task-specific label column (decisao_binaria / decisao_ternaria).
 
-    Parameters
-    ----------
-    case_type : str
-        "dv" (Domestic Violence) or "boc" (Breach of Contract).
-    split : str
-        "train" or "gold_test". Gold test must only be used for final evaluation.
+    Args:
+        case_type: "dv" (Domestic Violence) or "boc" (Breach of Contract).
+        split: "train" or "gold_test". Gold test must only be used for final
+            evaluation.
 
-    Returns
-    -------
-    texts      : list[str]             — raw document texts
-    y_raw      : np.ndarray of str     — un-encoded string labels (uppercase, stripped)
-    dates      : pd.Series of datetime — decision dates for temporal ordering
-    n_processo : list[str]             — case identifiers aligned with rows
+    Returns:
+        Tuple of (texts, y_raw, dates, n_processo):
+            texts: list[str] — raw document texts.
+            y_raw: np.ndarray of str — un-encoded string labels (uppercase,
+                stripped).
+            dates: pd.Series of datetime — decision dates for temporal
+                ordering.
+            n_processo: list[str] — case identifiers aligned with rows.
+
+    Raises:
+        ValueError: If ``case_type`` or ``split`` is not a recognised value.
     """
     case_type = case_type.lower()
     if case_type not in SPLIT_PATHS:
@@ -211,17 +213,17 @@ def load_bert_train_val_split(
     fraction as a temporal validation set for BERT early stopping.
     Labels are already integer-encoded (via encode_labels).
 
-    Parameters
-    ----------
-    case_type : str  — "dv" or "boc"
-    val_ratio : float — fraction of training data to use as validation (default 0.15)
+    Args:
+        case_type: "dv" or "boc".
+        val_ratio: Fraction of training data to use as validation
+            (default 0.15).
 
-    Returns
-    -------
-    texts_tr  : list[str]
-    y_tr      : np.ndarray of int
-    texts_val : list[str]
-    y_val     : np.ndarray of int
+    Returns:
+        Tuple of (texts_tr, y_tr, texts_val, y_val):
+            texts_tr: list[str] — training document texts.
+            y_tr: np.ndarray of int — training labels.
+            texts_val: list[str] — validation document texts.
+            y_val: np.ndarray of int — validation labels.
     """
     texts_tr, y_tr, _, texts_val, y_val, _ = load_bert_train_val_split_with_ids(
         case_type, val_ratio=val_ratio
@@ -241,19 +243,18 @@ def load_bert_train_val_split_with_ids(
     scoring the model on the data it was fitted on, to diagnose whether a
     collapsed model is underfitting or overfitting.
 
-    Parameters
-    ----------
-    case_type : str  — "dv" or "boc"
-    val_ratio : float — fraction of training data to use as validation
+    Args:
+        case_type: "dv" or "boc".
+        val_ratio: Fraction of training data to use as validation.
 
-    Returns
-    -------
-    texts_tr  : list[str]
-    y_tr      : np.ndarray of int
-    ids_tr    : list[str]
-    texts_val : list[str]
-    y_val     : np.ndarray of int
-    ids_val   : list[str]
+    Returns:
+        Tuple of (texts_tr, y_tr, ids_tr, texts_val, y_val, ids_val):
+            texts_tr: list[str] — training document texts.
+            y_tr: np.ndarray of int — training labels.
+            ids_tr: list[str] — training case identifiers.
+            texts_val: list[str] — validation document texts.
+            y_val: np.ndarray of int — validation labels.
+            ids_val: list[str] — validation case identifiers.
     """
     texts, y_raw, dates, n_processo = load_split_text_data(case_type, split="train")
     y = encode_labels(y_raw, case_type)
@@ -282,14 +283,16 @@ def load_bert_train_val_split_with_ids(
 def encode_labels(y_raw: np.ndarray, case_type: str) -> np.ndarray:
     """Map string labels to integers using the fixed LABEL_MAPPINGS.
 
-    Parameters
-    ----------
-    y_raw : array-like of str
-    case_type : str — "dv" or "boc"
+    Args:
+        y_raw: Array-like of string labels.
+        case_type: "dv" or "boc".
 
-    Returns
-    -------
-    np.ndarray of int64, shape (n_samples,)
+    Returns:
+        np.ndarray of int64, shape (n_samples,).
+
+    Raises:
+        ValueError: If any label in ``y_raw`` is not in the mapping for
+            ``case_type``.
     """
     mapping = LABEL_MAPPINGS[case_type.lower()]
     try:
@@ -316,7 +319,7 @@ def build_feature_pipeline() -> Pipeline:
     2. PCA(0.95)       -- retain 95% explained variance; reduces 1024-dim to
                          ~80–200 components (exact count determined at fit time)
 
-    Notes
+    Notes:
     -----
     svd_solver='full' is required when n_components is a float (variance ratio).
     Must be fitted ONLY on training data to prevent data leakage into validation
@@ -357,15 +360,19 @@ if __name__ == "__main__":
         assert X_reduced.shape[1] < EMBED_DIM, "PCA did not reduce dimensionality."
 
         # ── Raw text path (for BERT fine-tuning) ─────────────────────────
-        texts, y_raw_text, dates_text, n_proc_text = load_split_text_data(ct, split="train")
+        texts, y_raw_text, dates_text, n_proc_text = load_split_text_data(
+            ct, split="train"
+        )
         print(f"  texts count      : {len(texts)}")
         print(f"  text sample      : {texts[0][:80]!r}...")
         print(f"  Unique labels    : {sorted(set(y_raw_text))}")
-        assert len(texts) == len(y_raw_text) == len(dates_text) == len(n_proc_text), (
-            "load_split_text_data: length mismatch across returned arrays"
-        )
+        assert (
+            len(texts) == len(y_raw_text) == len(dates_text) == len(n_proc_text)
+        ), "load_split_text_data: length mismatch across returned arrays"
         y_text_encoded = encode_labels(y_raw_text, ct)
         unique_t, counts_t = np.unique(y_text_encoded, return_counts=True)
-        print(f"  y encoded        : {dict(zip(unique_t.tolist(), counts_t.tolist()))}\n")
+        print(
+            f"  y encoded        : {dict(zip(unique_t.tolist(), counts_t.tolist()))}\n"
+        )
 
     print("Smoke test passed.")

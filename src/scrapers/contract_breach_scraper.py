@@ -1,5 +1,4 @@
-"""
-Contract Breach Scraper for Portuguese Peace Courts (Julgados de Paz)
+"""Contract Breach Scraper for Portuguese Peace Courts (Julgados de Paz).
 
 This module extracts and processes legal documents related to contract breach cases
 from Portuguese Julgados de Paz (Justice of the Peace Courts).
@@ -15,16 +14,25 @@ Author: Helton Mendonça
 Transparency Note: This code was optimized and polished using AI assistance(mainly Claude 4.0 and 4.5). However, all the logic, structure and final review were done by the author.
 
 Date: October 13th 2025
+
+Corpus snapshot warning
+------------------------
+The corpus used in this dissertation was scraped in November 2025 and therefore contains only
+cases published up to that date. Re-running this scraper today will return a larger and
+different set of cases, because the source databases are continuously updated. It will
+therefore not reproduce the exact dataset counts or evaluation figures reported in the thesis.
+To reproduce the published results, use the archived corpus from the Zenodo record (see
+docs/09-reproducibility-notes.md) rather than re-scraping.
 """
 
 import re
+
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 
 
 class ContractBreachScraper:
-    """
-    Scraper for contract breach cases from Portuguese Peace Courts.
+    """Scraper for contract breach cases from Portuguese Peace Courts.
 
     Supports extraction from all Portuguese Julgados de Paz that publish
     decisions on dgsi.pt.
@@ -40,8 +48,7 @@ class ContractBreachScraper:
     async def scrape_judgment(
         self, url, court_name="JP", case_type="INCUMPRIMENTO DE CONTRATOS"
     ):
-        """
-        Scrape a single judgment from Julgados de Paz.
+        """Scrape a single judgment from Julgados de Paz.
 
         Args:
             url (str): URL of the judgment page
@@ -68,8 +75,7 @@ class ContractBreachScraper:
             return None
 
     def _extract_metadata(self, soup, url, court_name, case_type):
-        """
-        Extract all metadata from judgment HTML.
+        """Extract all metadata from judgment HTML.
 
         Args:
             soup: BeautifulSoup parsed HTML
@@ -264,8 +270,7 @@ class ContractBreachScraper:
         return full_text
 
     def _extract_decision_from_text(self, full_text):
-        """
-        Extract final decision from judgment text using progressive cascade algorithm.
+        """Extract final decision from judgment text using progressive cascade algorithm.
 
         This algorithm is replicated from the domestic violence scraper to ensure
         consistent decision extraction across all case types. It prevents data leakage
@@ -444,11 +449,7 @@ class ContractBreachScraper:
         decimal_iso,
         verbs,
     ):
-        """
-        Try to extract decision using all patterns in priority order.
-        Returns extracted result if successful, None otherwise.
-        """
-
+        """Try to extract the decision using all cascade patterns in priority order, returning the first successful match or None."""
         # Layer 1A: DISPOSITIVO with roman numerals
         matches = list(
             re.finditer(disp_roman, search_text, re.IGNORECASE | re.MULTILINE)
@@ -615,8 +616,7 @@ class ContractBreachScraper:
         confidence,
         require_verbs=False,
     ):
-        """
-        Validate and extract decision text from a pattern match.
+        """Validate and extract decision text from a pattern match.
 
         Args:
             full_text: Complete judgment text

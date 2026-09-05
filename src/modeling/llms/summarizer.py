@@ -1,8 +1,4 @@
-"""
-summarizer.py
-=============
-
-Slice: smart truncation strategy (steps 1 to 4, partial ranking)
+"""Slice: smart truncation strategy (steps 1 to 4, partial ranking).
 
 This module implements:
 1) Sentence splitting for Portuguese legal decisions.
@@ -11,6 +7,16 @@ This module implements:
 4) Document centroid embedding.
 5) Linguistic anchor scoring (facts, norms, proof, reasoning, jurisprudence, conflict).
 6) Combined query+centroid+anchor sentence scoring.
+
+Determinism note
+-----------------
+Seeds are fixed and decoding is greedy (`temperature=0.0`, `top_k=1`,
+`seed=42`), so this script is deterministic on identical hardware. Results
+may still diverge slightly on different hardware: GPU floating-point
+reductions are non-associative and kernel selection, driver version and
+tensor-core availability all change the order of operations. Expect small
+differences in embeddings and occasional label flips on borderline cases.
+This does not indicate a bug.
 """
 
 from __future__ import annotations
@@ -28,7 +34,6 @@ import torch
 from tqdm.auto import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-
 LEGAL_BERTIMBAU_MODEL = "stjiris/bert-large-portuguese-cased-legal-mlm-nli-sts-v1"
 CASE_TYPE_QUERIES: dict[str, tuple[str, ...]] = {
     "dv": (
@@ -43,7 +48,7 @@ CASE_TYPE_QUERIES: dict[str, tuple[str, ...]] = {
         "razões do tribunal para decidir favorável, desfavorável ou parcialmente favorável",
         "factos provados e normas aplicadas que determinam o resultado da ação",
         "apreciação da prova e enquadramento legal para decisão total ou parcial da ação",
-        "análise de pedidos aceites ou rejeitados e sua influência no resultado final da ação"
+        "análise de pedidos aceites ou rejeitados e sua influência no resultado final da ação",
     ),
 }
 
@@ -141,7 +146,13 @@ _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;:])\s+")
 
 @dataclass(frozen=True)
 class SentenceEmbeddingBatch:
-    """Container for sentence-level embeddings extracted from a document."""
+    """Container for sentence-level embeddings extracted from a document.
+
+    Attributes:
+        sentences: Sentence strings, in document order.
+        embeddings: float32 ndarray of shape (n_sentences, hidden_size),
+            aligned row-for-row with `sentences`.
+    """
 
     sentences: list[str]
     embeddings: np.ndarray  # shape: (n_sentences, hidden_size), dtype float32
@@ -149,7 +160,17 @@ class SentenceEmbeddingBatch:
 
 @dataclass(frozen=True)
 class SentenceScoreBatch:
-    """Container for sentence scores and top-k summary selection."""
+    """Container for sentence scores and top-k summary selection.
+
+    Attributes:
+        scores: float32 ndarray of shape (n_sentences,) with one combined
+            score per sentence, in original document order.
+        top_indices: Indices (into `scores`/the source sentence list) of the
+            sentences selected for the summary, sorted ascending (document
+            order).
+        summary_text: Selected sentences joined with a single space, in
+            document order.
+    """
 
     scores: np.ndarray  # shape: (n_sentences,), dtype float32
     top_indices: list[int]
@@ -157,7 +178,22 @@ class SentenceScoreBatch:
 
 
 def split_sentences_pt_legal(text: str, *, min_chars: int = 8) -> list[str]:
-    """Split legal text into sentence-like units with lightweight normalization."""
+    """Split legal text into sentence-like units with lightweight normalization.
+
+    Collapses all whitespace, splits on the conservative `[.!?;:]`-followed-
+    by-whitespace boundary (keeping punctuation attached to each sentence),
+    and drops fragments shorter than `min_chars`.
+
+    Args:
+        text: Raw text to split; falsy/None values yield an empty list.
+        min_chars: Minimum character length for a split fragment to be kept.
+
+    Returns:
+        List of sentence strings, in original order.
+
+    Raises:
+        ValueError: If `min_chars < 1`.
+    """
     if min_chars < 1:
         raise ValueError("min_chars must be >= 1")
 
@@ -174,17 +210,22 @@ def split_sentences_pt_legal(text: str, *, min_chars: int = 8) -> list[str]:
     return out
 
 
-def _mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+def _mean_pool(
+    last_hidden_state: torch.Tensor, attention_mask: torch.Tensor
+) -> torch.Tensor:
+    """Mean-pool token embeddings over non-padding positions, per the attention mask."""
     expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
     masked = last_hidden_state * expanded
     return masked.sum(dim=1) / expanded.sum(dim=1).clamp(min=1e-9)
 
 
 def _best_device() -> torch.device:
+    """Return the CUDA device if available, otherwise CPU."""
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def _normalize_case_type(case_type: str) -> str:
+    """Normalize and validate a case type string against `CASE_TYPE_QUERIES`."""
     key = str(case_type or "").strip().lower()
     if key not in CASE_TYPE_QUERIES:
         valid = ", ".join(sorted(CASE_TYPE_QUERIES))
@@ -209,10 +250,27 @@ def encode_sentences_legalbert(
     batch_size: int = 16,
     max_length: int = 256,
 ) -> np.ndarray:
-    """
-    Encode sentence list with frozen LegalBERTimbau and mean pooling.
+    """Encode sentence list with frozen LegalBERTimbau and mean pooling.
 
-    Returns float32 ndarray with shape (n_sentences, hidden_size).
+    Empty/whitespace-only sentences are dropped before encoding. The
+    tokenizer/model pair is lazily loaded once per `model_name` (via
+    `_load_encoder`) and reused across calls; the model is frozen (`eval()`
+    mode, no gradient computation).
+
+    Args:
+        sentences: Sentences to encode.
+        model_name: HuggingFace model id to load/use.
+        batch_size: Number of sentences encoded per forward pass.
+        max_length: Max token length per sentence; longer sentences are
+            truncated.
+
+    Returns:
+        float32 ndarray of shape (n_sentences, hidden_size), where
+        `n_sentences` counts only the non-empty sentences after stripping.
+        Shape is (0, 0) if no non-empty sentences remain.
+
+    Raises:
+        ValueError: If `batch_size < 1` or `max_length < 8`.
     """
     if batch_size < 1:
         raise ValueError("batch_size must be >= 1")
@@ -269,7 +327,9 @@ def _ensure_2d_embeddings(embeddings: np.ndarray | list) -> np.ndarray:
     raise ValueError("Embeddings must be a 2D array or a sequence of vectors.")
 
 
-def _cosine_similarity_matrix_vector(matrix: np.ndarray, vector: np.ndarray) -> np.ndarray:
+def _cosine_similarity_matrix_vector(
+    matrix: np.ndarray, vector: np.ndarray
+) -> np.ndarray:
     """Cosine similarity between each matrix row and a vector."""
     if matrix.size == 0:
         return np.zeros((0,), dtype=np.float32)
@@ -278,13 +338,14 @@ def _cosine_similarity_matrix_vector(matrix: np.ndarray, vector: np.ndarray) -> 
     v = vector.astype(np.float32, copy=False)
     m_norm = np.linalg.norm(m, axis=1)
     v_norm = float(np.linalg.norm(v))
-    denom = np.clip(m_norm * max(v_norm, 1e-9), 1e-9, None) # avoid division by zero
+    denom = np.clip(m_norm * max(v_norm, 1e-9), 1e-9, None)  # avoid division by zero
     sims = (m @ v) / denom
     return sims.astype(np.float32, copy=False)
 
 
 @lru_cache(maxsize=32)
 def _encode_text_cached(text: str, model_name: str) -> np.ndarray:
+    """Encode a single text string with LegalBERTimbau, caching by (text, model_name)."""
     emb = encode_sentences_legalbert(
         [text],
         model_name=model_name,
@@ -298,12 +359,10 @@ def _encode_text_cached(text: str, model_name: str) -> np.ndarray:
 
 @lru_cache(maxsize=8)
 def _query_embedding_cached(case_type: str, model_name: str) -> np.ndarray:
+    """Compute and cache the mean query embedding over `CASE_TYPE_QUERIES[case_type]`."""
     key = _normalize_case_type(case_type)
     query_texts = CASE_TYPE_QUERIES[key]
-    vectors = [
-        _encode_text_cached(q, model_name=model_name)
-        for q in query_texts
-    ]
+    vectors = [_encode_text_cached(q, model_name=model_name) for q in query_texts]
     if not vectors:
         return np.zeros((0,), dtype=np.float32)
     mat = np.vstack(vectors).astype(np.float32, copy=False)
@@ -315,7 +374,23 @@ def query_embedding_for_case_type(
     *,
     model_name: str = LEGAL_BERTIMBAU_MODEL,
 ) -> np.ndarray:
-    """Return mean query embedding over multiple templates for case type intent."""
+    """Return mean query embedding over multiple templates for case type intent.
+
+    Args:
+        case_type: Case type key into `CASE_TYPE_QUERIES` ("dv" or "boc";
+            validated/normalized by `_normalize_case_type`).
+        model_name: LegalBERTimbau model id used to encode the query
+            templates.
+
+    Returns:
+        float32 ndarray of shape (hidden_size,): the mean of the encoded
+        `CASE_TYPE_QUERIES[case_type]` template embeddings. Shape (0,) if
+        no query templates are defined for the case type.
+
+    Raises:
+        ValueError: If `case_type` is not a recognized key (raised inside
+            `_normalize_case_type`, via the cached helper).
+    """
     return _query_embedding_cached(case_type=case_type, model_name=model_name)
 
 
@@ -324,10 +399,27 @@ def anchor_scores_for_sentences(
     *,
     anchor_group_weights: Mapping[str, float] | None = None,
 ) -> np.ndarray:
-    """
-    Compute normalized anchor score per sentence using weighted anchor groups.
+    """Compute normalized anchor score per sentence using weighted anchor groups.
 
-    Output range is [0, 1] where higher means stronger linguistic anchor match.
+    For each sentence, checks membership in each anchor group in
+    `ANCHOR_GROUPS` (case-insensitive substring match against any pattern in
+    the group), sums the weights of matched groups, and normalizes by the
+    total weight of all groups with weight > 0.
+
+    Args:
+        sentences: Sentences to score, in any order.
+        anchor_group_weights: Optional overrides for `ANCHOR_GROUP_WEIGHTS`,
+            merged on top of the defaults (unspecified groups keep their
+            default weight).
+
+    Returns:
+        float32 ndarray of shape (len(sentences),) in [0, 1], where higher
+        means stronger linguistic anchor match. All zeros if `sentences` is
+        empty or if every group weight resolves to 0.
+
+    Raises:
+        ValueError: If `anchor_group_weights` contains an unknown group name,
+            or a negative weight.
     """
     sentence_list = [str(s).lower() for s in list(sentences)]
     if not sentence_list:
@@ -337,7 +429,9 @@ def anchor_scores_for_sentences(
     if anchor_group_weights is not None:
         for k, v in anchor_group_weights.items():
             if k not in ANCHOR_GROUPS:
-                raise ValueError(f"Unknown anchor group '{k}'. Expected one of: {sorted(ANCHOR_GROUPS)}")
+                raise ValueError(
+                    f"Unknown anchor group '{k}'. Expected one of: {sorted(ANCHOR_GROUPS)}"
+                )
             if v < 0:
                 raise ValueError(f"Anchor group weight for '{k}' must be >= 0.")
             group_weights[k] = float(v)
@@ -349,7 +443,10 @@ def anchor_scores_for_sentences(
         if gw <= 0:
             continue
         hits = np.array(
-            [1.0 if any(p in sent for p in patterns) else 0.0 for sent in sentence_list],
+            [
+                1.0 if any(p in sent for p in patterns) else 0.0
+                for sent in sentence_list
+            ],
             dtype=np.float32,
         )
         weighted += gw * hits
@@ -361,8 +458,11 @@ def anchor_scores_for_sentences(
 
 
 def _sentence_anchor_categories(sentence: str) -> set[str]:
+    """Return the set of anchor group names (from ANCHOR_GROUPS) matched by a sentence."""
     s = sentence.lower()
-    return {cat for cat, patterns in ANCHOR_GROUPS.items() if any(p in s for p in patterns)}
+    return {
+        cat for cat, patterns in ANCHOR_GROUPS.items() if any(p in s for p in patterns)
+    }
 
 
 def _estimate_sentence_tokens(sentence: str) -> int:
@@ -371,7 +471,16 @@ def _estimate_sentence_tokens(sentence: str) -> int:
 
 
 def document_centroid_embedding(sentence_embeddings: np.ndarray | list) -> np.ndarray:
-    """Compute centroid embedding as mean sentence vector."""
+    """Compute centroid embedding as mean sentence vector.
+
+    Args:
+        sentence_embeddings: Per-sentence embeddings; coercible to a 2D
+            float32 array via `_ensure_2d_embeddings`.
+
+    Returns:
+        float32 ndarray of shape (hidden_size,): the mean over all sentence
+        rows. Shape (0,) if `sentence_embeddings` is empty.
+    """
     mat = _ensure_2d_embeddings(sentence_embeddings)
     if mat.size == 0:
         return np.zeros((0,), dtype=np.float32)
@@ -389,11 +498,46 @@ def score_sentences_query_centroid(
     anchor_group_weights: Mapping[str, float] | None = None,
     model_name: str = LEGAL_BERTIMBAU_MODEL,
 ) -> np.ndarray:
-    """Score sentences using weighted query similarity + centroid + linguistic anchors."""
+    """Score sentences using weighted query similarity + centroid + linguistic anchors.
+
+    Combines three cosine-similarity-based signals per sentence — similarity
+    to the case-type query embedding, similarity to the document centroid,
+    and the linguistic anchor score — into one weighted score. The three
+    weights are renormalized to sum to 1 before combination, so only their
+    relative magnitudes matter.
+
+    Args:
+        sentence_embeddings: Per-sentence embeddings; coercible to a 2D
+            float32 array via `_ensure_2d_embeddings`.
+        case_type: Case type used to look up the query embedding (see
+            `query_embedding_for_case_type`).
+        sentences: Sentence strings aligned with `sentence_embeddings`;
+            required when `anchor_weight > 0` (used for anchor matching).
+        query_weight: Relative weight for query-similarity.
+        centroid_weight: Relative weight for centroid-similarity.
+        anchor_weight: Relative weight for the linguistic anchor score.
+        anchor_group_weights: Optional overrides forwarded to
+            `anchor_scores_for_sentences`.
+        model_name: LegalBERTimbau model id used for the query embedding.
+
+    Returns:
+        float32 ndarray of shape (n_sentences,) with the combined,
+        weight-normalized score per sentence. All zeros if
+        `sentence_embeddings` is empty.
+
+    Raises:
+        ValueError: If any weight is negative, if all three weights are 0,
+            if `anchor_weight > 0` but `sentences` is None, or if `sentences`
+            and `sentence_embeddings` have mismatched lengths.
+    """
     if query_weight < 0 or centroid_weight < 0 or anchor_weight < 0:
-        raise ValueError("query_weight, centroid_weight and anchor_weight must be >= 0.")
+        raise ValueError(
+            "query_weight, centroid_weight and anchor_weight must be >= 0."
+        )
     if query_weight == 0 and centroid_weight == 0 and anchor_weight == 0:
-        raise ValueError("At least one of query_weight, centroid_weight or anchor_weight must be > 0.")
+        raise ValueError(
+            "At least one of query_weight, centroid_weight or anchor_weight must be > 0."
+        )
 
     mat = _ensure_2d_embeddings(sentence_embeddings)
     if mat.size == 0:
@@ -402,14 +546,26 @@ def score_sentences_query_centroid(
     q = query_embedding_for_case_type(case_type, model_name=model_name)
     c = document_centroid_embedding(mat)
 
-    q_scores = _cosine_similarity_matrix_vector(mat, q) if q.size else np.zeros((mat.shape[0],), dtype=np.float32)
-    c_scores = _cosine_similarity_matrix_vector(mat, c) if c.size else np.zeros((mat.shape[0],), dtype=np.float32)
+    q_scores = (
+        _cosine_similarity_matrix_vector(mat, q)
+        if q.size
+        else np.zeros((mat.shape[0],), dtype=np.float32)
+    )
+    c_scores = (
+        _cosine_similarity_matrix_vector(mat, c)
+        if c.size
+        else np.zeros((mat.shape[0],), dtype=np.float32)
+    )
     if anchor_weight > 0:
         if sentences is None:
             raise ValueError("sentences must be provided when anchor_weight > 0.")
-        a_scores = anchor_scores_for_sentences(sentences, anchor_group_weights=anchor_group_weights)
+        a_scores = anchor_scores_for_sentences(
+            sentences, anchor_group_weights=anchor_group_weights
+        )
         if len(a_scores) != mat.shape[0]:
-            raise ValueError("Length mismatch between sentences and sentence_embeddings for anchor scoring.")
+            raise ValueError(
+                "Length mismatch between sentences and sentence_embeddings for anchor scoring."
+            )
     else:
         a_scores = np.zeros((mat.shape[0],), dtype=np.float32)
 
@@ -417,7 +573,9 @@ def score_sentences_query_centroid(
     wq = query_weight / total
     wc = centroid_weight / total
     wa = anchor_weight / total
-    return (wq * q_scores + wc * c_scores + wa * a_scores).astype(np.float32, copy=False)
+    return (wq * q_scores + wc * c_scores + wa * a_scores).astype(
+        np.float32, copy=False
+    )
 
 
 def summarize_from_sentence_embeddings(
@@ -436,11 +594,66 @@ def summarize_from_sentence_embeddings(
     max_anchorless_sentences: int | None = None,
     model_name: str = LEGAL_BERTIMBAU_MODEL,
 ) -> SentenceScoreBatch:
-    """
-    Select top sentences with policy constraints:
-    1) token budget first,
-    2) anchor-first selection with configurable quotas/caps.
-    top_k is optional and not required for budget-constrained selection.
+    """Select top sentences with policy constraints: anchors first, then budget/quota-aware fallback.
+
+    Scores every sentence via `score_sentences_query_centroid` and ranks them
+    descending. Selection proceeds in two phases, both constrained by
+    `max_summary_tokens` (if set) and by `max_per_anchor_group` caps:
+
+    1. Anchor-first: walk the ranked sentences and greedily add only those
+       that match at least one `ANCHOR_GROUPS` category, until `top_k`
+       sentences are selected (if `top_k` is given) or the ranking is
+       exhausted.
+    2. Fallback: if `top_k` is None, or phase 1 selected fewer than `top_k`
+       sentences, walk the full ranking again and greedily add remaining
+       sentences (anchored or not), still respecting the anchorless quota —
+       `max_anchorless_sentences` if given, else
+       `int(top_k * (1 - min_anchor_ratio))` when `top_k` is set, else
+       unlimited.
+
+    The final selection is returned in original document order (not score
+    order); `top_k` is a target cap, not a requirement — fewer sentences can
+    be returned if the budget/quota constraints bind first.
+
+    Args:
+        sentences: Sentence strings, in document order.
+        sentence_embeddings: Per-sentence embeddings aligned with
+            `sentences`.
+        case_type: Case type used for query-similarity scoring.
+        top_k: Optional cap on the number of sentences to select. If None,
+            selection is driven purely by budget/anchor constraints.
+        query_weight: Forwarded to `score_sentences_query_centroid`.
+        centroid_weight: Forwarded to `score_sentences_query_centroid`.
+        anchor_weight: Forwarded to `score_sentences_query_centroid`.
+        anchor_group_weights: Forwarded to `score_sentences_query_centroid`.
+        max_summary_tokens: Optional cap on the summed
+            `_estimate_sentence_tokens` of selected sentences.
+        min_anchor_ratio: Used (only when `top_k` is set and
+            `max_anchorless_sentences` is None) to derive the anchorless
+            quota as `int(top_k * (1 - min_anchor_ratio))`.
+        max_per_anchor_group: Optional per-anchor-group cap on how many
+            selected sentences may belong to each group (a sentence counts
+            against every group it matches).
+        max_anchorless_sentences: Optional explicit cap on the number of
+            selected sentences with no anchor match at all; overrides the
+            `min_anchor_ratio`-derived quota when given.
+        model_name: LegalBERTimbau model id used for query-similarity
+            scoring.
+
+    Returns:
+        `SentenceScoreBatch` with the full per-sentence `scores` (document
+        order), `top_indices` of the selected sentences (sorted ascending,
+        i.e. document order), and `summary_text` (selected sentences joined
+        with single spaces). If `sentences` is empty, returns an empty
+        selection with the (empty) `scores` array.
+
+    Raises:
+        ValueError: If `top_k < 1`, `max_summary_tokens < 1`,
+            `min_anchor_ratio` is outside [0, 1], `sentences` and
+            `sentence_embeddings` have mismatched lengths, `max_per_anchor_group`
+            references an unknown group or a negative cap, or
+            `max_anchorless_sentences < 0`. Also propagates any `ValueError`
+            raised by `score_sentences_query_centroid`.
     """
     if top_k is not None and top_k < 1:
         raise ValueError("top_k must be >= 1 when provided")
@@ -474,7 +687,9 @@ def summarize_from_sentence_embeddings(
     if max_per_anchor_group is not None:
         for group, cap in max_per_anchor_group.items():
             if group not in ANCHOR_GROUPS:
-                raise ValueError(f"Unknown anchor group '{group}'. Expected one of: {sorted(ANCHOR_GROUPS)}")
+                raise ValueError(
+                    f"Unknown anchor group '{group}'. Expected one of: {sorted(ANCHOR_GROUPS)}"
+                )
             if cap < 0:
                 raise ValueError(f"max_per_anchor_group['{group}'] must be >= 0.")
             group_caps[group] = int(cap)
@@ -556,7 +771,9 @@ def summarize_from_sentence_embeddings(
 
     top_indices = sorted(selected)
     summary_text = " ".join(sentence_list[i] for i in top_indices)
-    return SentenceScoreBatch(scores=scores, top_indices=top_indices, summary_text=summary_text)
+    return SentenceScoreBatch(
+        scores=scores, top_indices=top_indices, summary_text=summary_text
+    )
 
 
 def summarize_for_prompt(
@@ -577,8 +794,32 @@ def summarize_for_prompt(
     max_anchorless_sentences: int | None = None,
     model_name: str = LEGAL_BERTIMBAU_MODEL,
 ) -> str:
-    """
-    End-to-end prompt summarization using query+centroid+anchor ranking.
+    """End-to-end prompt summarization using query+centroid+anchor ranking.
+
+    Splits and encodes `text` (`sentence_embeddings_for_document`), then
+    scores and selects sentences (`summarize_from_sentence_embeddings`) with
+    the same policy constraints (budget, anchor quotas/caps).
+
+    Args:
+        text: Full document text to summarize.
+        case_type: Case type used for query-similarity scoring.
+        top_k: Optional cap on the number of sentences to select.
+        sentence_min_chars: Forwarded to `split_sentences_pt_legal`.
+        batch_size: Forwarded to `encode_sentences_legalbert`.
+        max_length: Forwarded to `encode_sentences_legalbert`.
+        query_weight: Forwarded to `summarize_from_sentence_embeddings`.
+        centroid_weight: Forwarded to `summarize_from_sentence_embeddings`.
+        anchor_weight: Forwarded to `summarize_from_sentence_embeddings`.
+        anchor_group_weights: Forwarded to `summarize_from_sentence_embeddings`.
+        max_summary_tokens: Forwarded to `summarize_from_sentence_embeddings`.
+        min_anchor_ratio: Forwarded to `summarize_from_sentence_embeddings`.
+        max_per_anchor_group: Forwarded to `summarize_from_sentence_embeddings`.
+        max_anchorless_sentences: Forwarded to `summarize_from_sentence_embeddings`.
+        model_name: LegalBERTimbau model id used for encoding and scoring.
+
+    Returns:
+        The selected sentences joined into a single summary string (empty
+        string if `text` yields no sentences).
     """
     batch = sentence_embeddings_for_document(
         text=text,
@@ -613,9 +854,18 @@ def sentence_embeddings_for_document(
     batch_size: int = 16,
     max_length: int = 256,
 ) -> SentenceEmbeddingBatch:
-    """
-    Full Step 1+2 pipeline for one document:
-    split sentences, then encode each sentence.
+    """Full Step 1+2 pipeline for one document: split sentences, then encode each sentence.
+
+    Args:
+        text: Full document text.
+        model_name: LegalBERTimbau model id used for encoding.
+        sentence_min_chars: Forwarded to `split_sentences_pt_legal`.
+        batch_size: Forwarded to `encode_sentences_legalbert`.
+        max_length: Forwarded to `encode_sentences_legalbert`.
+
+    Returns:
+        `SentenceEmbeddingBatch` with the split sentences and their
+        embeddings, aligned row-for-row.
     """
     sentences = split_sentences_pt_legal(text, min_chars=sentence_min_chars)
     embeddings = encode_sentences_legalbert(
@@ -648,7 +898,56 @@ def build_sentence_embeddings_frame(
     checkpoint_every: int | None = None,
     resume_from_checkpoint: bool = False,
 ) -> pd.DataFrame:
-    """Run step 1+2 for each document and return a sentence-embedding dataframe."""
+    """Run step 1+2 for each document and return a sentence-embedding dataframe.
+
+    For every row in `df`, splits and encodes the text
+    (`sentence_embeddings_for_document`). If `case_type` is given, also
+    scores and selects sentences (`summarize_from_sentence_embeddings`, with
+    `top_k=None` and default query/centroid/anchor weights) and records the
+    selected subset alongside the full sentence list; if `case_type` is
+    falsy, no selection is performed and all sentences are recorded as
+    "selected" with placeholder 0.0 scores. Supports periodic checkpointing
+    to parquet and resuming a partially completed run.
+
+    Args:
+        df: DataFrame with one row per document, needing `text_column` and
+            `id_column`.
+        text_column: Column holding the full document text to encode.
+        id_column: Column holding the document identifier.
+        case_type: Optional case type; when set, enables sentence
+            scoring/selection metadata via `summarize_from_sentence_embeddings`.
+        batch_size: Forwarded to `sentence_embeddings_for_document`.
+        max_length: Forwarded to `sentence_embeddings_for_document`.
+        sentence_min_chars: Forwarded to `sentence_embeddings_for_document`.
+        model_name: LegalBERTimbau model id used for encoding/scoring.
+        checkpoint_path: Optional parquet path to write partial/final
+            results to. Also used, together with `resume_from_checkpoint`,
+            to skip already-processed document ids on a re-run.
+        checkpoint_every: If set (with `checkpoint_path`), writes the
+            accumulated rows to `checkpoint_path` every `checkpoint_every`
+            newly processed documents, and once more after the loop
+            completes.
+        resume_from_checkpoint: If True and `checkpoint_path` exists, loads
+            its rows first and skips any document id already present there.
+
+    Returns:
+        DataFrame with one row per processed document, including
+        `id_column`, `sentence_count`, `sentences`, `sentence_ranks`
+        (0-based positional index per sentence, not a score-based rank),
+        `sentence_scores`, `selected_sentence_count`,
+        `selected_sentence_indices`, `selected_sentence_ranks`,
+        `selected_sentence_scores`, `selected_sentences`, `summary_text`
+        (selected sentences joined with a single space — the column
+        `predict.py --smart_truncated_path` reads), and `sentence_embeddings`
+        (nested-list serialized via `_serialize_embeddings`); includes a
+        `case_type` column only when `case_type` was provided.
+
+    Raises:
+        ValueError: If `df` is missing `text_column` or `id_column`; if
+            `checkpoint_every` is provided and `< 1`; or if an existing
+            checkpoint file at `checkpoint_path` is missing `id_column` when
+            resuming.
+    """
     if text_column not in df.columns:
         raise ValueError(f"text_column '{text_column}' not found in input dataframe.")
     if id_column not in df.columns:
@@ -669,9 +968,13 @@ def build_sentence_embeddings_frame(
             )
         rows = prior.to_dict(orient="records")
         processed_ids = {str(v) for v in prior[id_column].astype(str).tolist()}
-        print(f"Resuming from checkpoint {ckpt_path} ({len(processed_ids)} docs already done).")
+        print(
+            f"Resuming from checkpoint {ckpt_path} ({len(processed_ids)} docs already done)."
+        )
 
-    iterator = tqdm(df.itertuples(index=False), total=len(df), desc="Sentence embeddings")
+    iterator = tqdm(
+        df.itertuples(index=False), total=len(df), desc="Sentence embeddings"
+    )
 
     for row in iterator:
         row_dict = row._asdict()
@@ -723,13 +1026,18 @@ def build_sentence_embeddings_frame(
                 "selected_sentence_ranks": selected_ranks,
                 "selected_sentence_scores": selected_scores,
                 "selected_sentences": selected_sentences,
+                "summary_text": " ".join(selected_sentences),
                 "sentence_embeddings": _serialize_embeddings(batch.embeddings),
             }
         )
         processed_ids.add(doc_id)
         since_last_checkpoint += 1
 
-        if ckpt_path is not None and checkpoint_every is not None and since_last_checkpoint >= checkpoint_every:
+        if (
+            ckpt_path is not None
+            and checkpoint_every is not None
+            and since_last_checkpoint >= checkpoint_every
+        ):
             ckpt_path.parent.mkdir(parents=True, exist_ok=True)
             pd.DataFrame(rows).to_parquet(ckpt_path, index=False)
             since_last_checkpoint = 0
@@ -741,13 +1049,16 @@ def build_sentence_embeddings_frame(
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the sentence-embedding CLI pipeline."""
     parser = argparse.ArgumentParser(
         description=(
             "Generate sentence-level embeddings (steps 1+2 of smart truncation) "
             "with frozen LegalBERTimbau and save to parquet."
         )
     )
-    parser.add_argument("--input_path", help="Input parquet/csv path (single-file mode).")
+    parser.add_argument(
+        "--input_path", help="Input parquet/csv path (single-file mode)."
+    )
     parser.add_argument("--output_path", help="Output parquet path (single-file mode).")
     parser.add_argument(
         "--run_train_batch",
@@ -789,7 +1100,9 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Optional case type label used to compute selection metadata.",
     )
-    parser.add_argument("--batch_size", type=int, default=16, help="Sentence encoder batch size.")
+    parser.add_argument(
+        "--batch_size", type=int, default=16, help="Sentence encoder batch size."
+    )
     parser.add_argument(
         "--max_length",
         type=int,
@@ -836,6 +1149,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_input_frame(path: Path) -> pd.DataFrame:
+    """Load an input document table from a .parquet or .csv file."""
     suffix = path.suffix.lower()
     if suffix == ".parquet":
         return pd.read_parquet(path)
@@ -858,11 +1172,41 @@ def run_sentence_embedding_pipeline(
     checkpoint_every: int | None = None,
     resume_from_checkpoint: bool = False,
 ) -> pd.DataFrame:
-    """
-    Notebook-friendly one-call pipeline for step 1+2 sentence embeddings.
+    """Notebook-friendly one-call pipeline for step 1+2 sentence embeddings.
 
-    This is intended for Colab/Jupyter use in a single cell.
-    Returns the generated dataframe and writes it to parquet.
+    This is intended for Colab/Jupyter use in a single cell. Loads
+    `input_path` (optionally capped to the first `max_docs` rows), runs
+    `build_sentence_embeddings_frame`, writes the result to `output_path`
+    (parquet), and returns the resulting dataframe. When `checkpoint_every`
+    is set, `output_path` doubles as the checkpoint file (partial progress
+    is saved there during the run and can be resumed via
+    `resume_from_checkpoint`).
+
+    Args:
+        input_path: Input .parquet or .csv file with `text_column`/`id_column`.
+        output_path: Output parquet path; also used as the checkpoint path
+            when `checkpoint_every` is set.
+        text_column: Forwarded to `build_sentence_embeddings_frame`.
+        id_column: Forwarded to `build_sentence_embeddings_frame`.
+        case_type: Forwarded to `build_sentence_embeddings_frame`.
+        batch_size: Forwarded to `build_sentence_embeddings_frame`.
+        max_length: Forwarded to `build_sentence_embeddings_frame`.
+        sentence_min_chars: Forwarded to `build_sentence_embeddings_frame`.
+        max_docs: Optional cap on the number of input rows processed
+            (first N).
+        checkpoint_every: Forwarded to `build_sentence_embeddings_frame`;
+            also determines whether `output_path` is used as the checkpoint
+            path.
+        resume_from_checkpoint: Forwarded to `build_sentence_embeddings_frame`.
+
+    Returns:
+        The generated sentence-embeddings DataFrame (also written to
+        `output_path`).
+
+    Raises:
+        FileNotFoundError: If `input_path` does not exist.
+        ValueError: If `max_docs` is provided and not positive, or if
+            `build_sentence_embeddings_frame` raises (missing columns, etc.).
     """
     in_path = Path(input_path)
     out_path = Path(output_path)
@@ -911,14 +1255,41 @@ def run_default_split_batch(
     checkpoint_every: int | None = None,
     resume_from_checkpoint: bool = False,
 ) -> dict[str, Path]:
-    """
-    Batch runner for canonical split files:
+    """Batch runner for the four canonical split files, for local or Google Drive paths.
+
+    Expected split files (under `input_root`):
       - dv_gold_test.csv
       - boc_gold_test.csv
       - dv_train_before_cutoff.csv
       - boc_train_before_cutoff.csv
 
-    Designed for local or Google Drive paths.
+    Runs `run_sentence_embedding_pipeline` once per split file found under
+    `input_root`, writing each split's output parquet under `output_root`
+    with the same base filename. If `case_type` is not given, it is
+    inferred per split from the filename prefix (the text before the first
+    underscore, i.e. "dv" or "boc").
+
+    Args:
+        input_root: Directory containing the four `<split_name>.csv` files.
+        output_root: Directory to write the four `<split_name>_enriched.parquet`
+            files to.
+        text_column: Forwarded to `run_sentence_embedding_pipeline`.
+        id_column: Forwarded to `run_sentence_embedding_pipeline`.
+        case_type: Optional case type applied to every split; if falsy, each
+            split's case type is inferred from its filename prefix instead.
+        batch_size: Forwarded to `run_sentence_embedding_pipeline`.
+        max_length: Forwarded to `run_sentence_embedding_pipeline`.
+        sentence_min_chars: Forwarded to `run_sentence_embedding_pipeline`.
+        max_docs: Forwarded to `run_sentence_embedding_pipeline`.
+        checkpoint_every: Forwarded to `run_sentence_embedding_pipeline`.
+        resume_from_checkpoint: Forwarded to `run_sentence_embedding_pipeline`.
+
+    Returns:
+        Dict mapping each split name to its written output parquet path.
+
+    Raises:
+        FileNotFoundError: If any of the four expected `<split_name>.csv`
+            files is missing under `input_root`.
     """
     in_root = Path(input_root)
     out_root = Path(output_root)
@@ -934,7 +1305,7 @@ def run_default_split_batch(
         in_path = in_root / f"{split_name}.csv"
         if not in_path.exists():
             raise FileNotFoundError(f"Batch input not found: {in_path}")
-        out_path = out_root / f"{split_name}.parquet"
+        out_path = out_root / f"{split_name}_enriched.parquet"
         run_sentence_embedding_pipeline(
             input_path=in_path,
             output_path=out_path,
@@ -954,6 +1325,17 @@ def run_default_split_batch(
 
 
 def main() -> None:
+    """CLI entry point: run either the batch pipeline or a single-file pipeline.
+
+    If `--run_train_batch` is set, runs `run_default_split_batch` over the
+    four canonical split files under `--input_root`/`--output_root`;
+    otherwise runs `run_sentence_embedding_pipeline` once for
+    `--input_path`/`--output_path`.
+
+    Raises:
+        ValueError: If not in batch mode and either `--input_path` or
+            `--output_path` is missing.
+    """
     args = _parse_args()
     if args.run_train_batch:
         outputs = run_default_split_batch(
@@ -1023,4 +1405,3 @@ if __name__ == "__main__":
             print(f"  {split_name} -> {out_path}")
     else:
         main()
-

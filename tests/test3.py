@@ -2,12 +2,13 @@ import asyncio
 from crawl4ai import AsyncWebCrawler
 from bs4 import BeautifulSoup
 
+
 async def debug_dgsi_form():
     """
     First, let's see what the actual form looks like
     """
     async with AsyncWebCrawler(headless=False, verbose=True) as crawler:
-        
+
         # Debug JavaScript to inspect the form
         debug_js = """
         console.log('=== DEBUGGING DGSI FORM ===');
@@ -48,105 +49,111 @@ async def debug_dgsi_form():
         
         return 'Debug complete';
         """
-        
+
         result = await crawler.arun(
             url="https://www.dgsi.pt/jtre.nsf/",
             js_code=[debug_js],
-            delay_before_return_html=3
+            delay_before_return_html=3,
         )
-        
+
         return result.html
+
 
 async def try_direct_search_url():
     """
     Let's try to construct the search URL directly
     """
     async with AsyncWebCrawler(headless=True, verbose=True) as crawler:
-        
+
         # Try common search URL patterns
         search_urls = [
             "https://www.dgsi.pt/jtre.nsf/SearchView?SearchView&Query=VIOLÊNCIA+DOMÉSTICA",
             "https://www.dgsi.pt/jtre.nsf/frmSearch?SearchView",
             "https://www.dgsi.pt/jtre.nsf/search?query=VIOLÊNCIA+DOMÉSTICA",
         ]
-        
+
         for url in search_urls:
             print(f"Trying: {url}")
             try:
-                result = await crawler.arun(
-                    url=url,
-                    delay_before_return_html=3
-                )
-                
+                result = await crawler.arun(url=url, delay_before_return_html=3)
+
                 if "OpenDocument" in result.html:
                     print(f"✅ Found results at: {url}")
-                    
-                    soup = BeautifulSoup(result.html, 'html.parser')
-                    links = [a['href'] for a in soup.find_all('a', href=True) 
-                            if 'OpenDocument' in a['href']]
-                    
+
+                    soup = BeautifulSoup(result.html, "html.parser")
+                    links = [
+                        a["href"]
+                        for a in soup.find_all("a", href=True)
+                        if "OpenDocument" in a["href"]
+                    ]
+
                     print(f"Found {len(links)} acordão links")
                     return links
-                    
+
             except Exception as e:
                 print(f"Failed: {e}")
                 continue
-        
+
         return []
+
 
 async def analyze_original_url():
     """
     Let's carefully analyze your original working URL
     """
-    original_url = "https://www.dgsi.pt/jtre.nsf/8f8d2b7e72244bca80256879006d6594?CreateDocument"
-    
+    original_url = (
+        "https://www.dgsi.pt/jtre.nsf/8f8d2b7e72244bca80256879006d6594?CreateDocument"
+    )
+
     async with AsyncWebCrawler(
-        headless=False,  # Let's see what happens
-        verbose=True
+        headless=False, verbose=True  # Let's see what happens
     ) as crawler:
-        
+
         result = await crawler.arun(
-            url=original_url,
-            delay_before_return_html=8,
-            wait_for_js=True
+            url=original_url, delay_before_return_html=8, wait_for_js=True
         )
-        
+
         print(f"Original URL status: {result.status_code}")
         print(f"Final URL: {result.url}")
-        
+
         # Check if it redirects or loads content
-        soup = BeautifulSoup(result.html, 'html.parser')
-        
+        soup = BeautifulSoup(result.html, "html.parser")
+
         # Look for any forms or search interfaces
-        forms = soup.find_all('form')
+        forms = soup.find_all("form")
         print(f"Forms found: {len(forms)}")
-        
+
         # Look for the search results we expect
         if "500 documents found" in result.html or "documentos" in result.html:
             print("✅ Original URL does work!")
-            links = [a['href'] for a in soup.find_all('a', href=True) 
-                    if 'OpenDocument' in a['href']]
+            links = [
+                a["href"]
+                for a in soup.find_all("a", href=True)
+                if "OpenDocument" in a["href"]
+            ]
             return links
-        
+
         return []
+
 
 async def main():
     print("🔍 Step 1: Debug form structure")
     await debug_dgsi_form()
-    
-    print("\n🔍 Step 2: Try direct search URLs")  
+
+    print("\n🔍 Step 2: Try direct search URLs")
     links = await try_direct_search_url()
-    
+
     if not links:
         print("\n🔍 Step 3: Analyze original URL")
         links = await analyze_original_url()
-    
+
     if links:
         print(f"\n✅ Success! Found {len(links)} links")
         for i, link in enumerate(links[:5]):
             print(f"{i+1}. {link}")
     else:
         print("\n❌ No links found")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

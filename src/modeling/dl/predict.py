@@ -1,11 +1,6 @@
-"""
-predict.py
-==========
+"""predict.py: inference and gold-test evaluation for the Legal BERTimbau classification head.
 
-Inference and gold-test evaluation for the Legal BERTimbau classification head.
-
-Provides
---------
+Provides:
   BERTConfig                    — tokenisation constants for the frozen encoder
 
   load_model(case_type, model_dir, device)
@@ -72,11 +67,11 @@ from train import (
 # ---------------------------------------------------------------------------
 # Conditional import from the embedding module.
 #
-# legal_bertimbau_tokenization_embedding.py has side-effectful top-level code:
-# it reads CSV files from Path("."), runs a smoke test, and calls nvidia-smi.
-# That code executes on import and may raise FileNotFoundError when not run
-# from the script's expected working directory.  We import what we need and
-# fall back to local equivalents so predict.py is usable in all contexts.
+# legal_bertimbau_tokenization_embedding.py guards its expensive top-level
+# work (CSV loads, smoke test, model download/tokenization/encoding) behind
+# `if __name__ == "__main__":`, so importing it here is safe. The try/except
+# is kept only as a defensive fallback in case that module is ever moved,
+# renamed, or its dependencies (e.g. the HF model download) are unavailable.
 # ---------------------------------------------------------------------------
 try:
     from legal_bertimbau_tokenization_embedding import (  # type: ignore
@@ -112,12 +107,11 @@ class BERTConfig:
     (legal_bertimbau_tokenization_embedding.py).  Pass a custom BERTConfig
     only if you regenerated the embeddings with different settings.
 
-    Attributes
-    ----------
-    model_name       : HuggingFace model identifier
-    max_length       : maximum tokens per window (BERT positional limit = 512)
-    stride           : overlap between consecutive windows
-    window_batch_size: GPU micro-batch size for window encoding
+    Attributes:
+        model_name: HuggingFace model identifier.
+        max_length: Maximum tokens per window (BERT positional limit = 512).
+        stride: Overlap between consecutive windows.
+        window_batch_size: GPU micro-batch size for window encoding.
     """
 
     model_name: str = "stjiris/bert-large-portuguese-cased-legal-mlm-nli-sts-v1"
@@ -150,17 +144,20 @@ def load_model(
     If run_name is None, falls back to the legacy bare filenames
     (feature_pipeline.joblib / classifier.pt).
 
-    Parameters
-    ----------
-    case_type : str — "dv" or "boc"
-    model_dir : Path — root model directory (parent of case_type subdirectory)
-    device : torch.device or None (auto-selected)
-    run_name : str or None — prefix used when saving (e.g. "v1")
+    Args:
+        case_type: "dv" or "boc".
+        model_dir: Root model directory (parent of the case_type subdirectory).
+        device: Torch device to load the classifier onto (auto-selected if None).
+        run_name: Prefix used when saving (e.g. "v1"). None falls back to the
+            legacy bare filenames.
 
-    Returns
-    -------
-    (fitted_pipeline, model) : (sklearn.pipeline.Pipeline, LegalBertClassifier)
-        model is in eval mode on device.
+    Returns:
+        Tuple of (fitted_pipeline, model): a fitted
+        ``sklearn.pipeline.Pipeline`` and a ``LegalBertClassifier`` in eval
+        mode on ``device``.
+
+    Raises:
+        FileNotFoundError: If the pipeline or classifier artefact is missing.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -203,18 +200,20 @@ def load_bert_model(
     Artefact expected (written by train.save_bert_model):
         {model_dir}/{case_type}/{run_name}_bert_classifier.pt
 
-    Parameters
-    ----------
-    case_type : str — "dv" or "boc"
-    model_dir : Path — root model directory (parent of case_type subdirectory)
-    device : torch.device or None (auto-selected)
-    run_name : str or None — prefix used when saving (e.g. "bert_v1")
+    Args:
+        case_type: "dv" or "boc".
+        model_dir: Root model directory (parent of the case_type subdirectory).
+        device: Torch device to load the model onto (auto-selected if None).
+        run_name: Prefix used when saving (e.g. "bert_v1").
 
-    Returns
-    -------
-    LegalBertForClassification in eval mode on device.
-    The returned model carries a ``model_name`` attribute (the HuggingFace
-    identifier stored in the checkpoint) for use by predict_bert.
+    Returns:
+        The fine-tuned ``LegalBertForClassification`` in eval mode on
+        ``device``. The returned model carries a ``model_name`` attribute
+        (the HuggingFace identifier stored in the checkpoint) for use by
+        ``predict_bert``.
+
+    Raises:
+        FileNotFoundError: If the classifier artefact is missing.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -236,7 +235,9 @@ def load_bert_model(
     # Attach stored attributes for downstream inference
     model.model_name = checkpoint.get("model_name", DEFAULT_BERT_CONFIG.model_name)
     model.max_windows = checkpoint.get("max_windows", DEFAULT_BERT_CONFIG.max_length)
-    model.window_mbatch = checkpoint.get("window_mbatch", DEFAULT_BERT_CONFIG.window_batch_size)
+    model.window_mbatch = checkpoint.get(
+        "window_mbatch", DEFAULT_BERT_CONFIG.window_batch_size
+    )
     model.to(device)
     model.eval()
     return model
@@ -259,18 +260,17 @@ def predict(
     Model-agnostic: works with both PyTorch (LegalBertClassifier / nn.Module)
     and sklearn estimators (anything with a .predict() method).
 
-    Parameters
-    ----------
-    X : np.ndarray, shape (n, 1024)
-        Raw frozen BERT embeddings (not yet scaled/PCA-reduced).
-    fitted_pipeline : sklearn.pipeline.Pipeline
-    model : LegalBertClassifier or sklearn estimator
-    case_type : str — "dv" or "boc"
-    device : torch.device or None (ignored for sklearn models)
+    Args:
+        X: Raw frozen BERT embeddings, not yet scaled/PCA-reduced, shape (n, 1024).
+        fitted_pipeline: Fitted ``sklearn.pipeline.Pipeline`` (scaler + PCA).
+        model: A ``LegalBertClassifier`` (or other ``nn.Module``) or a sklearn
+            estimator exposing ``.predict()``.
+        case_type: "dv" or "boc".
+        device: Torch device for PyTorch models (auto-selected if None,
+            ignored for sklearn models).
 
-    Returns
-    -------
-    np.ndarray of int64, shape (n,)
+    Returns:
+        np.ndarray of int64, shape (n,) — predicted class labels.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -296,17 +296,17 @@ def predict_proba(
 ) -> np.ndarray:
     """Return probability estimates from pre-extracted BERT embeddings.
 
-    Parameters
-    ----------
-    X : np.ndarray, shape (n, 1024)
-    fitted_pipeline : sklearn.pipeline.Pipeline
-    model : LegalBertClassifier or sklearn estimator with .predict_proba()
-    case_type : str — "dv" or "boc"
-    device : torch.device or None (ignored for sklearn models)
+    Args:
+        X: Raw frozen BERT embeddings, not yet scaled/PCA-reduced, shape (n, 1024).
+        fitted_pipeline: Fitted ``sklearn.pipeline.Pipeline`` (scaler + PCA).
+        model: A ``LegalBertClassifier`` (or other ``nn.Module``) or a sklearn
+            estimator exposing ``.predict_proba()``.
+        case_type: "dv" or "boc".
+        device: Torch device for PyTorch models (auto-selected if None,
+            ignored for sklearn models).
 
-    Returns
-    -------
-    np.ndarray of float32, shape (n, n_classes) — rows sum to 1.0
+    Returns:
+        np.ndarray of float32, shape (n, n_classes) — rows sum to 1.0.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -374,22 +374,21 @@ def predict_bert(
 ) -> np.ndarray:
     """Predict integer class labels from raw texts using a fine-tuned BERT model.
 
-    Parameters
-    ----------
-    texts : list[str]
-    model : LegalBertForClassification — fine-tuned, in eval mode
-    case_type : str — "dv" or "boc"
-    device : torch.device or None (auto-selected)
-    batch_size : int — tokenization + inference batch size
+    Args:
+        texts: Raw document texts.
+        model: Fine-tuned ``LegalBertForClassification``, in eval mode.
+        case_type: "dv" or "boc".
+        device: Torch device (auto-selected if None).
+        batch_size: Window mini-batch size passed to sliding-window inference.
 
-    Returns
-    -------
-    np.ndarray of int64, shape (n,)
+    Returns:
+        np.ndarray of int64, shape (n,) — predicted class labels.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     from transformers import AutoTokenizer
+
     model_name = getattr(model, "model_name", DEFAULT_BERT_CONFIG.model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = model.to(device).eval()
@@ -407,22 +406,21 @@ def predict_bert_proba(
 ) -> np.ndarray:
     """Return probability estimates from raw texts using a fine-tuned BERT model.
 
-    Parameters
-    ----------
-    texts : list[str]
-    model : LegalBertForClassification — fine-tuned, in eval mode
-    case_type : str — "dv" or "boc"
-    device : torch.device or None (auto-selected)
-    batch_size : int — tokenization + inference batch size
+    Args:
+        texts: Raw document texts.
+        model: Fine-tuned ``LegalBertForClassification``, in eval mode.
+        case_type: "dv" or "boc".
+        device: Torch device (auto-selected if None).
+        batch_size: Window mini-batch size passed to sliding-window inference.
 
-    Returns
-    -------
-    np.ndarray of float32, shape (n, n_classes) — rows sum to 1.0
+    Returns:
+        np.ndarray of float32, shape (n, n_classes) — rows sum to 1.0.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     from transformers import AutoTokenizer
+
     model_name = getattr(model, "model_name", DEFAULT_BERT_CONFIG.model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = model.to(device).eval()
@@ -464,7 +462,7 @@ def _encode_texts_to_embeddings(
     device : torch.device
     bert_config : BERTConfig — tokenisation parameters (default: DEFAULT_BERT_CONFIG)
 
-    Returns
+    Returns:
     -------
     np.ndarray, shape (n_texts, embed_dim), dtype float32
     """
@@ -485,7 +483,9 @@ def _encode_texts_to_embeddings(
         win_weights: list[np.ndarray] = []
 
         for batch_start in range(0, len(windows), bert_config.window_batch_size):
-            batch_windows = windows[batch_start: batch_start + bert_config.window_batch_size]
+            batch_windows = windows[
+                batch_start : batch_start + bert_config.window_batch_size
+            ]
             padded = tokenizer.pad(
                 [
                     {"input_ids": ids, "attention_mask": mask}
@@ -498,19 +498,15 @@ def _encode_texts_to_embeddings(
 
             with torch.no_grad():
                 outputs = bert_model(**padded)
-                pooled = _mean_pool(
-                    outputs.last_hidden_state, padded["attention_mask"]
-                )
-                batch_embs = pooled.float().cpu().numpy()       # (batch, embed_dim)
-                batch_wts = (
-                    padded["attention_mask"].sum(dim=1).float().cpu().numpy()
-                )
+                pooled = _mean_pool(outputs.last_hidden_state, padded["attention_mask"])
+                batch_embs = pooled.float().cpu().numpy()  # (batch, embed_dim)
+                batch_wts = padded["attention_mask"].sum(dim=1).float().cpu().numpy()
 
             win_embeddings.append(batch_embs)
             win_weights.append(batch_wts)
 
-        all_embs = np.vstack(win_embeddings)        # (n_windows, embed_dim)
-        all_wts = np.concatenate(win_weights)        # (n_windows,)
+        all_embs = np.vstack(win_embeddings)  # (n_windows, embed_dim)
+        all_wts = np.concatenate(win_weights)  # (n_windows,)
         doc_emb = (all_embs * all_wts[:, None]).sum(axis=0) / all_wts.sum()
         all_embeddings.append(doc_emb.astype(np.float32))
 
@@ -540,23 +536,24 @@ def make_bert_predict_fn(
       2. Applies fitted StandardScaler + PCA pipeline
       3. Runs the classification head → probabilities
 
-    Parameters
-    ----------
-    fitted_pipeline : sklearn.pipeline.Pipeline
-    model : LegalBertClassifier or sklearn estimator
-    bert_model : torch.nn.Module
-        Frozen BERT encoder (transformers AutoModel, hidden_size must match
-        the embed_dim used when the parquet embeddings were generated: 1024).
-    tokenizer : HuggingFace AutoTokenizer
-    case_type : str — "dv" or "boc"
-    bert_config : BERTConfig — tokenisation parameters (default: DEFAULT_BERT_CONFIG)
-    device : torch.device or None
+    Args:
+        fitted_pipeline: Fitted ``sklearn.pipeline.Pipeline`` (scaler + PCA).
+        model: A ``LegalBertClassifier`` (or other ``nn.Module``) or a sklearn
+            estimator exposing ``.predict_proba()``.
+        bert_model: Frozen BERT encoder (transformers ``AutoModel``);
+            ``hidden_size`` must match the embed_dim used when the parquet
+            embeddings were generated (1024).
+        tokenizer: HuggingFace ``AutoTokenizer`` matching ``bert_model``.
+        case_type: "dv" or "boc".
+        bert_config: Tokenisation parameters (default: ``DEFAULT_BERT_CONFIG``).
+        device: Torch device to run ``bert_model``/``model`` on (auto-selected
+            if None).
 
-    Returns
-    -------
-    Callable[[list[str]], np.ndarray]
+    Returns:
+        A callable ``predict_fn(texts) -> np.ndarray`` of shape
+        (n, n_classes), float32.
 
-    Example
+    Example:
     -------
     from transformers import AutoModel, AutoTokenizer
     pipeline, mlp = load_model("dv", model_dir)
@@ -607,23 +604,29 @@ def run_gold_test_predictions(
          predict_proba).  Useful for evaluating Raw BERT embeddings + any
          downstream classifier without saving to disk first.
 
-    Parameters
-    ----------
-    case_type : str — "dv" or "boc"
-    fitted_pipeline : sklearn.pipeline.Pipeline or None
-    model : LegalBertClassifier, sklearn estimator, or None
-    model_dir : Path or None
-        Root model directory (parent of case_type subdirectory).
-        If given, overrides fitted_pipeline / model with disk-loaded versions.
-    device : torch.device or None
+    Args:
+        case_type: "dv" or "boc".
+        fitted_pipeline: Fitted ``sklearn.pipeline.Pipeline``, or None to load
+            from disk via ``model_dir``.
+        model: A trained model (PyTorch or sklearn interface), or None to
+            load from disk via ``model_dir``.
+        model_dir: Root model directory (parent of the case_type
+            subdirectory). If given, overrides ``fitted_pipeline`` / ``model``
+            with disk-loaded versions.
+        device: Torch device (auto-selected if None).
+        run_name: Prefix used when saving, forwarded to ``load_model`` when
+            ``model_dir`` is given.
 
-    Returns
-    -------
-    dict with keys:
-        y_pred     : np.ndarray[int64],   shape (n,)
-        y_true     : np.ndarray[int64],   shape (n,)
-        y_proba    : np.ndarray[float32], shape (n, n_classes)
-        n_processo : list[str]
+    Returns:
+        dict with keys:
+            y_pred     : np.ndarray[int64],   shape (n,)
+            y_true     : np.ndarray[int64],   shape (n,)
+            y_proba    : np.ndarray[float32], shape (n, n_classes)
+            n_processo : list[str]
+
+    Raises:
+        ValueError: If ``model_dir`` is None and either ``fitted_pipeline``
+            or ``model`` is also None.
 
     Example — bootstrap CI
     ----------------------
@@ -641,9 +644,7 @@ def run_gold_test_predictions(
         print(f"  Loading model from {Path(model_dir) / case_type} ...")
         fitted_pipeline, model = load_model(case_type, model_dir, device, run_name)
     elif fitted_pipeline is None or model is None:
-        raise ValueError(
-            "Provide either model_dir or both fitted_pipeline and model."
-        )
+        raise ValueError("Provide either model_dir or both fitted_pipeline and model.")
 
     # Gold test split — loaded here and ONLY here
     print("  Loading gold test data ...")
@@ -679,22 +680,26 @@ def run_gold_test_predictions_bert(
       a) ``model_dir`` is given  → load model from disk via load_bert_model().
       b) ``model`` is given directly → use as-is (skips disk load).
 
-    Parameters
-    ----------
-    case_type : str — "dv" or "boc"
-    model : LegalBertForClassification or None
-    model_dir : Path or None
-    device : torch.device or None (auto-selected)
-    run_name : str or None — prefix used when saving (e.g. "bert_v1")
-    batch_size : int — inference batch size
+    Args:
+        case_type: "dv" or "boc".
+        model: Fine-tuned ``LegalBertForClassification``, or None to load
+            from disk via ``model_dir``.
+        model_dir: Root model directory (parent of the case_type
+            subdirectory). If given, loads the model from disk via
+            ``load_bert_model``.
+        device: Torch device (auto-selected if None).
+        run_name: Prefix used when saving (e.g. "bert_v1").
+        batch_size: Window mini-batch size passed to sliding-window inference.
 
-    Returns
-    -------
-    dict with keys:
-        y_pred     : np.ndarray[int64],   shape (n,)
-        y_true     : np.ndarray[int64],   shape (n,)
-        y_proba    : np.ndarray[float32], shape (n, n_classes)
-        n_processo : list[str]
+    Returns:
+        dict with keys:
+            y_pred     : np.ndarray[int64],   shape (n,)
+            y_true     : np.ndarray[int64],   shape (n,)
+            y_proba    : np.ndarray[float32], shape (n, n_classes)
+            n_processo : list[str]
+
+    Raises:
+        ValueError: If both ``model_dir`` and ``model`` are None.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -747,21 +752,26 @@ def run_train_val_predictions_bert(
     Inference uses the same eval-mode sliding-window path as the gold test, so
     the two numbers are directly comparable.
 
-    Parameters
-    ----------
-    case_type : str — "dv" or "boc"
-    subset : str — "train" or "val"
-    model : LegalBertForClassification or None
-    model_dir : Path or None — load from disk when ``model`` is not given
-    device : torch.device or None (auto-selected)
-    run_name : str or None — checkpoint tag used when loading from disk
-    batch_size : int — inference batch size
-    val_ratio : float — must match the ratio used during training
+    Args:
+        case_type: "dv" or "boc".
+        subset: "train" or "val".
+        model: Fine-tuned ``LegalBertForClassification``, or None to load
+            from disk via ``model_dir``.
+        model_dir: Root model directory; used to load the model from disk
+            when ``model`` is not given.
+        device: Torch device (auto-selected if None).
+        run_name: Checkpoint tag used when loading from disk.
+        batch_size: Window mini-batch size passed to sliding-window inference.
+        val_ratio: Validation fraction of the train split; must match the
+            ratio used during training.
 
-    Returns
-    -------
-    dict with the same keys as run_gold_test_predictions_bert:
-        y_pred, y_true, y_proba, n_processo
+    Returns:
+        dict with the same keys as ``run_gold_test_predictions_bert``:
+        y_pred, y_true, y_proba, n_processo.
+
+    Raises:
+        ValueError: If ``subset`` is not "train" or "val", or if both
+            ``model_dir`` and ``model`` are None.
     """
     if subset not in ("train", "val"):
         raise ValueError(f"Unknown subset '{subset}'. Choose 'train' or 'val'.")
@@ -776,8 +786,8 @@ def run_train_val_predictions_bert(
         raise ValueError("Provide either model_dir or model.")
 
     print(f"  Loading {subset} text data ...")
-    texts_tr, y_tr, ids_tr, texts_val, y_val, ids_val = load_bert_train_val_split_with_ids(
-        case_type, val_ratio=val_ratio
+    texts_tr, y_tr, ids_tr, texts_val, y_val, ids_val = (
+        load_bert_train_val_split_with_ids(case_type, val_ratio=val_ratio)
     )
     texts, y_true, n_processo = (
         (texts_tr, y_tr, ids_tr) if subset == "train" else (texts_val, y_val, ids_val)
@@ -818,23 +828,21 @@ def save_predictions_parquet(
         case_type    — "dv" or "boc"
         split        — which split these predictions came from
 
-    Parameters
-    ----------
-    results   : dict returned by run_gold_test_predictions[_bert] or
-                run_train_val_predictions_bert
-                keys: y_pred, y_true, y_proba, n_processo
-    case_type : "dv" or "boc"
-    run_name  : version tag written into the ``run_name`` column and used as
-                the filename prefix (e.g. "bert_v4")
-    output_dir: directory to write into; defaults to
-                DEFAULT_OUTPUT_DIR / case_type / "predictions"
-    split     : "gold_test", "train" or "val".  Gold test keeps the original
-                filename for backwards compatibility with existing analysis
-                notebooks; other splits are suffixed so nothing is overwritten.
+    Args:
+        results: dict returned by ``run_gold_test_predictions``[``_bert``] or
+            ``run_train_val_predictions_bert`` — keys: y_pred, y_true,
+            y_proba, n_processo.
+        case_type: "dv" or "boc".
+        run_name: Version tag written into the ``run_name`` column and used
+            as the filename prefix (e.g. "bert_v4").
+        output_dir: Directory to write into; defaults to
+            ``DEFAULT_OUTPUT_DIR / case_type / "predictions"``.
+        split: "gold_test", "train" or "val". Gold test keeps the original
+            filename for backwards compatibility with existing analysis
+            notebooks; other splits are suffixed so nothing is overwritten.
 
-    Returns
-    -------
-    Path to the saved parquet file.
+    Returns:
+        Path to the saved parquet file.
     """
     if output_dir is None:
         output_dir = Path(DEFAULT_OUTPUT_DIR) / case_type / "predictions"
@@ -873,7 +881,7 @@ def save_predictions_parquet(
 # ---------------------------------------------------------------------------
 
 _SHAP_OUTPUT_NAMES: dict[str, list[str]] = {
-    "dv":  list(LABEL_NAMES_DV.values()),
+    "dv": list(LABEL_NAMES_DV.values()),
     "boc": list(LABEL_NAMES_BOC.values()),
 }
 
@@ -917,33 +925,39 @@ def _run_shap_bert(
     # --- select documents to explain ---
     output_subdir: str | None = None
     if shap_case_ids is not None:
-        id_set  = set(shap_case_ids)
+        id_set = set(shap_case_ids)
         indices = [i for i, cid in enumerate(n_processo) if cid in id_set]
         not_found = id_set - {n_processo[i] for i in indices}
         if not_found:
-            print(f"  WARNING: {len(not_found)} requested case(s) not found in gold test: {sorted(not_found)}")
+            print(
+                f"  WARNING: {len(not_found)} requested case(s) not found in gold test: {sorted(not_found)}"
+            )
         if not indices:
             print("  No matching cases found — skipping SHAP.")
             return
-        texts      = [texts[i] for i in indices]
+        texts = [texts[i] for i in indices]
         n_processo = [n_processo[i] for i in indices]
-        y_true     = y_true[np.array(indices)]
+        y_true = y_true[np.array(indices)]
         output_subdir = "5_gold_set"
     elif max_shap_docs is not None:
-        texts      = texts[:max_shap_docs]
+        texts = texts[:max_shap_docs]
         n_processo = n_processo[:max_shap_docs]
-        y_true     = y_true[:max_shap_docs]
+        y_true = y_true[:max_shap_docs]
 
     # n_processo values often contain "/" (e.g. "299/23.4SXLSB.L1-5") which
     # would be interpreted as a path separator in filenames — sanitize to "_".
     import re as _re
+
     safe_ids = [_re.sub(r'[/\\:*?"<>|]', "_", cid) for cid in n_processo]
 
     # Ensure the output directory tree exists before SHAP starts writing files.
     from explanation import CASE_TYPE_OUTPUT_DIRS
+
     case_dir = CASE_TYPE_OUTPUT_DIRS.get(case_type, case_type)
     if output_subdir:
-        shap_model_dir = _SHAP_BASE_DIR / case_dir / output_subdir / (run_name or "bert")
+        shap_model_dir = (
+            _SHAP_BASE_DIR / case_dir / output_subdir / (run_name or "bert")
+        )
     else:
         shap_model_dir = _SHAP_BASE_DIR / case_dir / (run_name or "bert")
     shap_model_dir.mkdir(parents=True, exist_ok=True)
@@ -975,13 +989,31 @@ def main(
     model_dir: Path = DEFAULT_OUTPUT_DIR,
     run_name: str | None = None,
 ) -> dict:
-    """Run gold test evaluation (MLP), print metrics with bootstrap CIs, save forest plot."""
+    """Run gold test evaluation (MLP), print metrics with bootstrap CIs, save forest plot.
+
+    Loads the trained frozen-embeddings pipeline/model, predicts on the gold
+    test split, evaluates with bootstrap confidence intervals, saves a forest
+    plot of the metrics, and persists the predictions to parquet.
+
+    Args:
+        case_type: "dv" or "boc".
+        model_dir: Root model directory (parent of the case_type subdirectory).
+        run_name: Prefix used when the model was saved (e.g. "v1").
+
+    Returns:
+        dict returned by ``run_gold_test_predictions`` — keys: y_pred,
+        y_true, y_proba, n_processo.
+    """
     print(f"\n{'=' * 60}")
     print(f"Legal BERTimbau — Gold Test Evaluation ({case_type.upper()})")
     print(f"{'=' * 60}\n")
 
-    results = run_gold_test_predictions(case_type, model_dir=model_dir, run_name=run_name)
-    eval_results = run_classification_evaluation(results["y_true"], results["y_pred"], case_type)
+    results = run_gold_test_predictions(
+        case_type, model_dir=model_dir, run_name=run_name
+    )
+    eval_results = run_classification_evaluation(
+        results["y_true"], results["y_pred"], case_type
+    )
     plots_dir = Path(model_dir) / case_type / "plots"
     plot_forest(eval_results, case_type, run_name=run_name, output_dir=plots_dir)
     save_predictions_parquet(results, case_type, run_name=run_name)
@@ -1008,7 +1040,9 @@ def _print_fit_diagnosis(split_evals: dict, case_type: str) -> None:
     print(f"\n{'=' * 74}")
     print(f"FIT DIAGNOSIS — {case_type.upper()}  (one model, three splits)")
     print(f"{'=' * 74}")
-    print(f"  {'Split':<12} {'n':>6} {'Macro-F1':>10} {'MCC':>8}   Predicted class counts")
+    print(
+        f"  {'Split':<12} {'n':>6} {'Macro-F1':>10} {'MCC':>8}   Predicted class counts"
+    )
 
     scores: dict[str, tuple[float, float]] = {}
     for label in order:
@@ -1068,18 +1102,42 @@ def main_bert(
     When ``eval_train`` is set, the same model is additionally scored on the
     train and validation subsets it was fitted on, and a train-vs-gold summary
     is printed to diagnose underfitting versus overfitting.
+
+    Args:
+        case_type: "dv" or "boc".
+        model_dir: Root model directory (parent of the case_type subdirectory).
+        run_name: Prefix used when the model was saved (e.g. "bert_v1").
+        batch_size: Window mini-batch size passed to sliding-window inference.
+        run_shap: If True, run SHAP sentence-level explanations after
+            evaluation.
+        max_shap_docs: Cap on number of gold-test documents to explain with
+            SHAP (None = all). Ignored when ``shap_case_ids`` is given.
+        shap_case_ids: If given, explain only these specific n_processo
+            values instead of the first ``max_shap_docs`` gold-test cases.
+        eval_train: If True, additionally score the model on the train and
+            validation subsets and print a fit diagnosis.
+        val_ratio: Validation fraction of the train split; must match the
+            ratio used during training.
+
+    Returns:
+        dict returned by ``run_gold_test_predictions_bert`` — keys: y_pred,
+        y_true, y_proba, n_processo.
     """
     print(f"\n{'=' * 60}")
     print(f"Legal BERTimbau (fine-tuned) — Gold Test Evaluation ({case_type.upper()})")
     print(f"{'=' * 60}\n")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = load_bert_model(case_type, model_dir=model_dir, device=device, run_name=run_name)
+    model = load_bert_model(
+        case_type, model_dir=model_dir, device=device, run_name=run_name
+    )
 
     results = run_gold_test_predictions_bert(
         case_type, model=model, batch_size=batch_size
     )
-    eval_results = run_classification_evaluation(results["y_true"], results["y_pred"], case_type)
+    eval_results = run_classification_evaluation(
+        results["y_true"], results["y_pred"], case_type
+    )
     plots_dir = Path(model_dir) / case_type / "plots"
     plot_forest(eval_results, case_type, run_name=run_name, output_dir=plots_dir)
     save_predictions_parquet(results, case_type, run_name=run_name)
@@ -1091,16 +1149,24 @@ def main_bert(
             print(f"Scoring model on the {label} subset ({case_type.upper()})")
             print(f"{'-' * 60}")
             sub_results = run_train_val_predictions_bert(
-                case_type, subset=subset, model=model,
-                batch_size=batch_size, val_ratio=val_ratio,
+                case_type,
+                subset=subset,
+                model=model,
+                batch_size=batch_size,
+                val_ratio=val_ratio,
             )
             sub_eval = run_classification_evaluation(
-                sub_results["y_true"], sub_results["y_pred"], case_type,
+                sub_results["y_true"],
+                sub_results["y_pred"],
+                case_type,
                 split_label=label.capitalize(),
             )
             plot_forest(
-                sub_eval, case_type, run_name=run_name,
-                output_dir=plots_dir, split_label=label,
+                sub_eval,
+                case_type,
+                run_name=run_name,
+                output_dir=plots_dir,
+                split_label=label,
             )
             save_predictions_parquet(
                 sub_results, case_type, run_name=run_name, split=subset
@@ -1111,6 +1177,7 @@ def main_bert(
 
     if run_shap:
         from features import load_split_text_data
+
         texts, _, _, n_processo = load_split_text_data(case_type, split="gold_test")
         _run_shap_bert(
             model=model,
@@ -1161,11 +1228,18 @@ def _run_smoke_test() -> None:
 
     # ── Mock HuggingFace tokenizer ───────────────────────────────────────
     class _MockTokenizer:
-        def __call__(self, text, truncation=True, max_length=512, stride=128,
-                     return_overflowing_tokens=True, return_attention_mask=True):
+        def __call__(
+            self,
+            text,
+            truncation=True,
+            max_length=512,
+            stride=128,
+            return_overflowing_tokens=True,
+            return_attention_mask=True,
+        ):
             n_tok = min(max(len(str(text).split()) + 2, 3), max_length)
             return {
-                "input_ids":      [list(range(n_tok))],
+                "input_ids": [list(range(n_tok))],
                 "attention_mask": [[1] * n_tok],
             }
 
@@ -1177,7 +1251,7 @@ def _run_smoke_test() -> None:
                 ids_batch.append(item["input_ids"] + [0] * pad_len)
                 mask_batch.append(item["attention_mask"] + [0] * pad_len)
             return {
-                "input_ids":      torch.tensor(ids_batch, dtype=torch.long),
+                "input_ids": torch.tensor(ids_batch, dtype=torch.long),
                 "attention_mask": torch.tensor(mask_batch, dtype=torch.long),
             }
 
@@ -1236,9 +1310,13 @@ def _run_smoke_test() -> None:
             # 5 ── make_bert_predict_fn with BERTConfig
             print("  [5] make_bert_predict_fn (BERTConfig threaded through)...")
             predict_fn = make_bert_predict_fn(
-                loaded_pipeline, loaded_model,
-                mock_bert, mock_tok, case_type,
-                bert_config=smoke_cfg, device=device,
+                loaded_pipeline,
+                loaded_model,
+                mock_bert,
+                mock_tok,
+                case_type,
+                bert_config=smoke_cfg,
+                device=device,
             )
             test_texts = [
                 "texto legal de teste para verificar o pipeline",
@@ -1247,9 +1325,10 @@ def _run_smoke_test() -> None:
             ]
             proba_out = predict_fn(test_texts)
 
-            assert proba_out.shape == (len(test_texts), n_classes), (
-                f"predict_fn shape: {proba_out.shape}"
-            )
+            assert proba_out.shape == (
+                len(test_texts),
+                n_classes,
+            ), f"predict_fn shape: {proba_out.shape}"
             assert np.allclose(proba_out.sum(axis=1), 1.0, atol=1e-4)
             print(
                 f"  OK — make_bert_predict_fn shape {proba_out.shape} "
@@ -1263,10 +1342,13 @@ def _run_smoke_test() -> None:
 
     class _MockHFModel(torch.nn.Module):
         """Minimal AutoModel stand-in — avoids HuggingFace download in tests."""
+
         def __init__(self):
             super().__init__()
             self.config = type("Cfg", (), {"hidden_size": 1024})()
-            self._p = torch.nn.Parameter(torch.zeros(1))  # ensure state_dict is non-empty
+            self._p = torch.nn.Parameter(
+                torch.zeros(1)
+            )  # ensure state_dict is non-empty
 
         def forward(self, input_ids, attention_mask=None, **_):
             b, s = input_ids.shape
@@ -1274,11 +1356,19 @@ def _run_smoke_test() -> None:
 
     class _MockBatchTokenizer:
         """Tokenizer stand-in for both single-doc sliding-window and batch calls."""
+
         pad_token_id = 0
 
         def __call__(
-            self, texts, truncation=True, max_length=512, stride=128, padding=None,
-            return_tensors=None, return_overflowing_tokens=False, return_attention_mask=True,
+            self,
+            texts,
+            truncation=True,
+            max_length=512,
+            stride=128,
+            padding=None,
+            return_tensors=None,
+            return_overflowing_tokens=False,
+            return_attention_mask=True,
         ):
             # Single string → sliding-window path (return 2 mock windows as pt tensors)
             if isinstance(texts, str):
@@ -1294,29 +1384,49 @@ def _run_smoke_test() -> None:
 
     _orig_automodel = _tf.AutoModel
     _orig_autotokenizer = _tf.AutoTokenizer
-    _tf.AutoModel = type("_M", (), {"from_pretrained": staticmethod(lambda *a, **kw: _MockHFModel())})
-    _tf.AutoTokenizer = type("_T", (), {"from_pretrained": staticmethod(lambda *a, **kw: _MockBatchTokenizer())})
+    _tf.AutoModel = type(
+        "_M", (), {"from_pretrained": staticmethod(lambda *a, **kw: _MockHFModel())}
+    )
+    _tf.AutoTokenizer = type(
+        "_T",
+        (),
+        {"from_pretrained": staticmethod(lambda *a, **kw: _MockBatchTokenizer())},
+    )
     try:
         for case_type in ("dv", "boc"):
             n_classes = 1 if IS_BINARY[case_type] else N_CLASSES[case_type]
             with tempfile.TemporaryDirectory() as tmp:
                 tmp_path = Path(tmp)
                 bert_clf = LegalBertForClassification(n_classes=n_classes).to(device)
-                save_bert_model(bert_clf, case_type, output_dir=tmp_path, run_name="smoke_test")
+                save_bert_model(
+                    bert_clf, case_type, output_dir=tmp_path, run_name="smoke_test"
+                )
 
                 print(f"  [6] load_bert_model round-trip — case_type={case_type}...")
-                loaded = load_bert_model(case_type, tmp_path, device, run_name="smoke_test")
+                loaded = load_bert_model(
+                    case_type, tmp_path, device, run_name="smoke_test"
+                )
                 assert isinstance(loaded, LegalBertForClassification)
                 assert loaded.model_name == DEFAULT_BERT_CONFIG.model_name
-                print(f"  OK — loaded LegalBertForClassification, n_classes={n_classes}")
+                print(
+                    f"  OK — loaded LegalBertForClassification, n_classes={n_classes}"
+                )
 
-                print(f"  [7] predict_bert / predict_bert_proba — case_type={case_type}...")
+                print(
+                    f"  [7] predict_bert / predict_bert_proba — case_type={case_type}..."
+                )
                 test_texts = ["texto juridico de teste", "outro documento legal", ""]
-                y_pred_b = predict_bert(test_texts, loaded, case_type, device, batch_size=2)
-                y_proba_b = predict_bert_proba(test_texts, loaded, case_type, device, batch_size=2)
+                y_pred_b = predict_bert(
+                    test_texts, loaded, case_type, device, batch_size=2
+                )
+                y_proba_b = predict_bert_proba(
+                    test_texts, loaded, case_type, device, batch_size=2
+                )
 
                 assert y_pred_b.shape == (len(test_texts),), f"shape: {y_pred_b.shape}"
-                assert np.issubdtype(y_pred_b.dtype, np.integer), f"dtype: {y_pred_b.dtype}"
+                assert np.issubdtype(
+                    y_pred_b.dtype, np.integer
+                ), f"dtype: {y_pred_b.dtype}"
                 assert y_proba_b.shape == (len(test_texts), N_CLASSES[case_type])
                 assert np.allclose(y_proba_b.sum(axis=1), 1.0, atol=1e-4)
                 print(f"  OK — y_pred {y_pred_b.shape}, y_proba {y_proba_b.shape}")
@@ -1341,11 +1451,15 @@ if __name__ == "__main__":
     parser.add_argument("--case_type", choices=["dv", "boc"], default=None)
     parser.add_argument("--model_dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument(
-        "--run_name", type=str, default=None,
+        "--run_name",
+        type=str,
+        default=None,
         help="Run name prefix used when saving (e.g. 'bert_v1').",
     )
     parser.add_argument(
-        "--mode", choices=["mlp", "bert"], default="mlp",
+        "--mode",
+        choices=["mlp", "bert"],
+        default="mlp",
         help="mlp: frozen-embeddings MLP (default). bert: fine-tuned BERT end-to-end.",
     )
     parser.add_argument(
@@ -1372,7 +1486,7 @@ if __name__ == "__main__":
         help=(
             "Explain only these specific case IDs (n_processo). "
             "Outputs are saved under 5_gold_set/ subfolder. "
-            "Example: --shap_cases \"5052/21.7JAPRT-A.P1\" \"340/21.5TXLSB-E.L1-9\""
+            'Example: --shap_cases "5052/21.7JAPRT-A.P1" "340/21.5TXLSB-E.L1-9"'
         ),
     )
     parser.add_argument(
@@ -1403,10 +1517,14 @@ if __name__ == "__main__":
         max_shap = None if args.max_shap_docs == 0 else args.max_shap_docs
         if args.mode == "bert":
             main_bert(
-                args.case_type, args.model_dir, args.run_name,
-                run_shap=args.shap, max_shap_docs=max_shap,
+                args.case_type,
+                args.model_dir,
+                args.run_name,
+                run_shap=args.shap,
+                max_shap_docs=max_shap,
                 shap_case_ids=args.shap_cases,
-                eval_train=args.eval_train, val_ratio=args.val_ratio,
+                eval_train=args.eval_train,
+                val_ratio=args.val_ratio,
             )
         else:
             main(args.case_type, args.model_dir, args.run_name)

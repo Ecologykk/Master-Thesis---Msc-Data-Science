@@ -1,6 +1,33 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+"""Tokenize legal case documents and extract frozen Legal BERTimbau embeddings.
+
+Converted from a Jupyter notebook (retains the ``# In[...]:`` cell markers):
+loads the cleaned DV (binary) and BoC (ternary) datasets from CSV, tokenizes
+each document into overlapping sliding windows with Legal BERTimbau, mean-pools
+the per-window token embeddings into a single frozen document embedding, and
+writes the resulting embedding and tokenization-summary tables to parquet.
+
+Selecting a CUDA device via ``nvidia-smi`` runs unconditionally at import
+time (cheap). The expensive work — reading the two full dataset CSVs, the
+in-process smoke test, downloading/loading the Legal BERTimbau model, and
+tokenizing/encoding the full corpus — only runs under
+``if __name__ == "__main__":``, so importing this module for its constants
+or helper functions (e.g. ``predict.py``'s ``MAX_LENGTH``/``STRIDE``/
+``WINDOW_BATCH_SIZE``/``mean_pool`` fallback import) is safe and side-effect
+free. Run it directly to (re)generate the frozen embeddings:
+``python src/modeling/dl/legal_bertimbau_tokenization_embedding.py``.
+
+Seeds are fixed and decoding is greedy (`temperature=0.0`, `top_k=1`,
+`seed=42`), so this script is deterministic on identical hardware. Results may
+still diverge slightly on different hardware: GPU floating-point reductions
+are non-associative and kernel selection, driver version and tensor-core
+availability all change the order of operations. Expect small differences in
+embeddings and occasional label flips on borderline cases. This does not
+indicate a bug.
+"""
+
 # # Legal BERTimbau Tokenization and Frozen Embeddings
 #
 # This notebook loads the cleaned legal datasets from `new_clean_data/`, tokenizes documents with Legal BERTimbau, extracts frozen document embeddings with batching and sliding windows, and saves the final embedding tables in parquet format.
@@ -53,22 +80,24 @@ from pathlib import Path
 
 import pandas as pd
 
-DATA_DIR = Path("new_clean_data")
-ROOT_DIR = Path(".")
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+DATA_DIR = _REPO_ROOT / "data" / "processed_data" / "eda"
 DATASET_PATHS = [
-    ROOT_DIR / "df_acordaos_dv_eda_binary.csv",
-    ROOT_DIR / "df_acordaos_boc_eda_ternary.csv",
+    DATA_DIR / "binary" / "df_acordaos_dv_eda_binary.csv",
+    DATA_DIR / "ternary" / "df_acordaos_boc_eda_ternary.csv",
 ]
 
-schema_summary = {}
-for path in DATASET_PATHS:
-    df_preview = pd.read_csv(path, nrows=2)
-    schema_summary[path.name] = {
-        "columns": list(df_preview.columns),
-        "dtypes": {column: str(dtype) for column, dtype in df_preview.dtypes.items()},
-    }
-
-schema_summary
+if __name__ == "__main__":
+    schema_summary = {}
+    for path in DATASET_PATHS:
+        df_preview = pd.read_csv(path, nrows=2)
+        schema_summary[path.name] = {
+            "columns": list(df_preview.columns),
+            "dtypes": {
+                column: str(dtype) for column, dtype in df_preview.dtypes.items()
+            },
+        }
+    print(schema_summary)
 
 
 # ## Pipeline Configuration
@@ -90,13 +119,13 @@ import csv
 MODEL_NAME = "stjiris/bert-large-portuguese-cased-legal-mlm-nli-sts-v1"
 TEXT_COLUMN = "texto_integral_sem_decisao"
 ID_COLUMN = "n_processo"
-OUTPUT_DIR = Path("bert_legal_embeddings")
+OUTPUT_DIR = _REPO_ROOT / "data" / "processed_data" / "bert_tokens_embedd"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 DATASET_CONFIGS = [
     {
         "name": "dv_binary",
-        "path": ROOT_DIR / "df_acordaos_dv_eda_binary.csv",
+        "path": DATASET_PATHS[0],
         "class_column": "decisao_binaria",
         "embedding_output": OUTPUT_DIR
         / "df_acordaos_dv_eda_binary_legal_bert_embeddings.parquet",
@@ -105,7 +134,7 @@ DATASET_CONFIGS = [
     },
     {
         "name": "boc_ternary",
-        "path": ROOT_DIR / "df_acordaos_boc_eda_ternary.csv",
+        "path": DATASET_PATHS[1],
         "class_column": "decisao_ternaria",
         "embedding_output": OUTPUT_DIR
         / "df_acordaos_boc_eda_ternary_legal_bert_embeddings.parquet",
@@ -197,12 +226,35 @@ else:
 
 
 def normalize_text(value):
+    """Collapse a raw cell value into whitespace-normalized text.
+
+    Args:
+        value: Raw cell value from the source CSV (may be NaN).
+
+    Returns:
+        str: Empty string if ``value`` is NaN, otherwise the string form of
+        ``value`` with runs of whitespace collapsed to single spaces and
+        leading/trailing whitespace stripped.
+    """
     if pd.isna(value):
         return ""
     return " ".join(str(value).split())
 
 
 def validate_input_frame(df, class_column):
+    """Validate that a raw dataset frame has the columns and id integrity required downstream.
+
+    Args:
+        df: Raw dataset DataFrame as loaded from CSV.
+        class_column: Name of the dataset-specific label column to require
+            (e.g. "decisao_binaria" or "decisao_ternaria").
+
+    Raises:
+        KeyError: If any required column (metadata, text, or class_column) is
+            missing from ``df``.
+        ValueError: If ``ID_COLUMN`` contains null values or is not unique
+            (duplicate document ids).
+    """
     required_columns = set(METADATA_COLUMNS + [TEXT_COLUMN, class_column])
     missing_columns = sorted(required_columns.difference(df.columns))
     if missing_columns:
@@ -220,6 +272,22 @@ def validate_input_frame(df, class_column):
 
 
 def load_dataset(config):
+    """Load, validate, and clean one dataset CSV for tokenization.
+
+    Reads the CSV named in ``config["path"]``, validates its schema via
+    ``validate_input_frame``, drops rows with a missing text or label value,
+    normalizes the text column, and drops rows left with empty text after
+    normalization.
+
+    Args:
+        config: One entry of ``DATASET_CONFIGS`` — dict with keys "name",
+            "path", and "class_column".
+
+    Returns:
+        pd.DataFrame: Cleaned dataset with added ``dataset_name`` (from
+        ``config["name"]``) and ``class_label`` (string copy of
+        ``config["class_column"]``) columns, and ``ID_COLUMN`` cast to str.
+    """
     df = pd.read_csv(config["path"], quoting=csv.QUOTE_ALL)
     validate_input_frame(df, config["class_column"])
 
@@ -234,6 +302,18 @@ def load_dataset(config):
 
 
 def mean_pool(last_hidden_state, attention_mask):
+    """Mean-pool per-token hidden states into one embedding, ignoring padding.
+
+    Args:
+        last_hidden_state: Token-level hidden states from the encoder, shape
+            (batch, seq_len, hidden_size).
+        attention_mask: Attention mask, shape (batch, seq_len), with 1 for
+            real tokens and 0 for padding.
+
+    Returns:
+        torch.Tensor, shape (batch, hidden_size) — the attention-mask-weighted
+        mean of the token embeddings for each sequence in the batch.
+    """
     expanded_mask = (
         attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
     )
@@ -244,6 +324,26 @@ def mean_pool(last_hidden_state, attention_mask):
 
 
 def tokenize_documents(df, tokenizer):
+    """Tokenize every document into overlapping sliding windows.
+
+    Each document is tokenized with truncation and ``return_overflowing_tokens``
+    so that documents longer than ``MAX_LENGTH`` are split into multiple
+    overlapping windows (stride ``STRIDE``) instead of being truncated to the
+    first window only.
+
+    Args:
+        df: Cleaned dataset DataFrame (as returned by ``load_dataset``), must
+            include ``dataset_name``, ``ID_COLUMN``, ``class_label``, and
+            ``TEXT_COLUMN``.
+        tokenizer: HuggingFace tokenizer for the Legal BERTimbau model.
+
+    Returns:
+        tuple: ``(window_records, tokenization_df)`` where ``window_records``
+        is a list of dicts (one per window) with keys "doc_key", "input_ids",
+        "attention_mask", "window_index"; and ``tokenization_df`` is a
+        per-document pd.DataFrame summarizing window counts and a token
+        preview, for QA purposes.
+    """
     window_records = []
     tokenization_rows = []
 
@@ -385,6 +485,24 @@ def encode_windows(window_records, tokenizer, model):
 
 
 def build_embedding_frame(df, tokenization_df, embedding_lookup):
+    """Assemble the final per-document embedding table.
+
+    Joins document metadata from ``df`` with the window count from
+    ``tokenization_df`` and the pooled document embedding from
+    ``embedding_lookup``, keyed by ``(dataset_name, ID_COLUMN)``.
+
+    Args:
+        df: Cleaned dataset DataFrame (as returned by ``load_dataset``).
+        tokenization_df: Per-document tokenization summary, as returned by
+            ``tokenize_documents``.
+        embedding_lookup: Mapping of ``(dataset_name, ID_COLUMN)`` to the
+            pooled document embedding (list[float]), as returned by
+            ``encode_windows``.
+
+    Returns:
+        pd.DataFrame: One row per document with metadata columns, class
+        label, text, window count, and the ``embedding`` column.
+    """
     tokenization_lookup = tokenization_df.set_index(["dataset_name", ID_COLUMN])[
         "window_count"
     ].to_dict()
@@ -407,6 +525,19 @@ def build_embedding_frame(df, tokenization_df, embedding_lookup):
 
 
 def process_dataset(config, tokenizer, model):
+    """Run the full tokenize → encode → assemble pipeline for one dataset.
+
+    Args:
+        config: One entry of ``DATASET_CONFIGS`` — dict with keys "name",
+            "path", "class_column", "embedding_output", "tokenization_output".
+        tokenizer: HuggingFace tokenizer for the Legal BERTimbau model.
+        model: Loaded Legal BERTimbau encoder (``AutoModel``), on ``DEVICE``.
+
+    Returns:
+        tuple: ``(df, tokenization_df, embeddings_df)`` — the cleaned input
+        DataFrame, the per-document tokenization summary, and the final
+        per-document embedding table (see ``build_embedding_frame``).
+    """
     df = load_dataset(config)
     window_records, tokenization_df = tokenize_documents(df, tokenizer)
     embedding_lookup = encode_windows(window_records, tokenizer, model)
@@ -569,52 +700,54 @@ def run_pipeline_smoke_test():
     return True
 
 
-smoke_test_ok = run_pipeline_smoke_test()
-assert smoke_test_ok, "Smoke test failed. Fix issues before running full embeddings."
+if __name__ == "__main__":
+    smoke_test_ok = run_pipeline_smoke_test()
+    assert (
+        smoke_test_ok
+    ), "Smoke test failed. Fix issues before running full embeddings."
 
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    print(f"Loading {MODEL_NAME} ...")
+    model = AutoModel.from_pretrained(MODEL_NAME)
+    model.to(DEVICE)
+    model.eval()
 
-# In[ ]:
+    if DEVICE.type == "cuda" and USE_FP16_INFERENCE:
+        model.half()
+        print("Model converted to float16 for inference.")
 
+    print(f"Model loaded on {DEVICE}")
+    torch.cuda.empty_cache()
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-print(f"Loading {MODEL_NAME} ...")
-model = AutoModel.from_pretrained(MODEL_NAME)
-model.to(DEVICE)
-model.eval()
+    results = {}
+    for config in DATASET_CONFIGS:
+        print(f"\nProcessing {config['name']} from {config['path']}")
+        dataset_df, tokenization_df, embeddings_df = process_dataset(
+            config, tokenizer, model
+        )
 
-if DEVICE.type == "cuda" and USE_FP16_INFERENCE:
-    model.half()
-    print("Model converted to float16 for inference.")
+        tokenization_df.to_parquet(
+            config["tokenization_output"], index=False, engine="fastparquet"
+        )
+        embeddings_df.to_parquet(
+            config["embedding_output"], index=False, engine="fastparquet"
+        )
 
-print(f"Model loaded on {DEVICE}")
-torch.cuda.empty_cache()
-
-results = {}
-for config in DATASET_CONFIGS:
-    print(f"\nProcessing {config['name']} from {config['path']}")
-    dataset_df, tokenization_df, embeddings_df = process_dataset(
-        config, tokenizer, model
-    )
-
-    tokenization_df.to_parquet(
-        config["tokenization_output"], index=False, engine="fastparquet"
-    )
-    embeddings_df.to_parquet(
-        config["embedding_output"], index=False, engine="fastparquet"
-    )
-
-    results[config["name"]] = {
-        "documents": len(dataset_df),
-        "tokenization_output": str(config["tokenization_output"]),
-        "embedding_output": str(config["embedding_output"]),
-        "embedding_dimension": (
-            len(embeddings_df.iloc[0]["embedding"]) if not embeddings_df.empty else 0
-        ),
-        "average_window_count": (
-            float(tokenization_df["window_count"].mean())
-            if not tokenization_df.empty
-            else 0.0
-        ),
-    }
+        results[config["name"]] = {
+            "documents": len(dataset_df),
+            "tokenization_output": str(config["tokenization_output"]),
+            "embedding_output": str(config["embedding_output"]),
+            "embedding_dimension": (
+                len(embeddings_df.iloc[0]["embedding"])
+                if not embeddings_df.empty
+                else 0
+            ),
+            "average_window_count": (
+                float(tokenization_df["window_count"].mean())
+                if not tokenization_df.empty
+                else 0.0
+            ),
+        }
+        print(results[config["name"]])
 
 results

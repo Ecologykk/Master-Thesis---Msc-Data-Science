@@ -1,8 +1,4 @@
-"""
-predict.py
-==========
-
-Slice 3 (LLM pipeline): zero-shot inference + evaluation on the gold test split.
+"""Slice 3 (LLM pipeline): zero-shot inference + evaluation on the gold test split.
 
 Pipeline
 --------
@@ -12,9 +8,19 @@ Pipeline
 4. Save predictions to parquet in data/models/llms/{model}/
 5. Run bootstrap evaluation + forest plot (src/evaluation/classification.py)
 
-Example
+Example:
 -------
 python src/modeling/llms/predict.py --case_type dv --model deepseek_r1_8b --stage zero_shot --run_name deepseek_zs_v1
+
+Determinism note
+-----------------
+Seeds are fixed and decoding is greedy (`temperature=0.0`, `top_k=1`,
+`seed=42`), so this script is deterministic on identical hardware. Results
+may still diverge slightly on different hardware: GPU floating-point
+reductions are non-associative and kernel selection, driver version and
+tensor-core availability all change the order of operations. Expect small
+differences in embeddings and occasional label flips on borderline cases.
+This does not indicate a bug.
 """
 
 from __future__ import annotations
@@ -51,8 +57,16 @@ from config import (
     LLM_OUTPUT_DIR,
     OLLAMA_MODELS,
 )
-from few_shot_retrieval_similarity import build_few_shot_examples_by_case, save_few_shot_examples_by_case
-from prompts import build_cot_prompt, build_few_shot_cot_prompt, build_few_shot_prompt, build_zero_shot_prompt
+from few_shot_retrieval_similarity import (
+    build_few_shot_examples_by_case,
+    save_few_shot_examples_by_case,
+)
+from prompts import (
+    build_cot_prompt,
+    build_few_shot_cot_prompt,
+    build_few_shot_prompt,
+    build_zero_shot_prompt,
+)
 
 
 def _encode_true_labels(y_raw: np.ndarray, case_type: str) -> np.ndarray:
@@ -103,14 +117,27 @@ def _estimate_tokens(text: str) -> int:
 
 
 def _estimate_prompt_tokens(messages: list[dict]) -> int:
+    """Rough token estimate for a full message list, summing over all message contents."""
     return _estimate_tokens("".join(str(m.get("content", "")) for m in messages))
 
 
 def _default_enriched_path(case_type: str, split: str) -> Path:
-    return Path("data/processed_data/llm_summaries") / f"{case_type}_{split}_enriched.parquet"
+    """Return the default enriched-parquet path for a case type/split combination.
+
+    Matches the `<case_type>_<split>_enriched.parquet` naming `summarizer.py
+    --run_train_batch` writes under `--output_root`.
+    """
+    return (
+        _THIS_FILE.parents[3]
+        / "data"
+        / "processed_data"
+        / "llm_summaries"
+        / f"{case_type}_{split}_enriched.parquet"
+    )
 
 
 def _load_enriched_df(path: Path) -> pd.DataFrame:
+    """Load an enriched parquet file, raising if it does not exist."""
     if not path.exists():
         raise FileNotFoundError(f"Enriched parquet not found: {path}")
     return pd.read_parquet(path)
@@ -126,6 +153,11 @@ def _build_few_shot_examples_mapping(
     max_total_cases: int | None,
     output_path: Path | None,
 ) -> dict[str, list[dict]]:
+    """Load query/candidate enriched parquets and build the few-shot example mapping.
+
+    Thin wrapper around `few_shot_retrieval_similarity.build_few_shot_examples_by_case`
+    that also optionally persists the result to `output_path`.
+    """
     query_df = _load_enriched_df(query_path)
     candidate_df = _load_enriched_df(candidate_path)
     print(
@@ -158,7 +190,9 @@ def _debug_print_prompt_payload(
     """Write debug prompt payload to file or stdout."""
     lines = []
     lines.append("\n" + "=" * 120)
-    lines.append(f"[DEBUG PROMPT] case_id={case_id} stage={stage} estimated_tokens={prompt_tokens_est}")
+    lines.append(
+        f"[DEBUG PROMPT] case_id={case_id} stage={stage} estimated_tokens={prompt_tokens_est}"
+    )
     lines.append(f"[DEBUG PROMPT] examples={len(examples)}")
     for idx, ex in enumerate(examples, start=1):
         lines.append(f"[DEBUG PROMPT] example {idx}:")
@@ -167,8 +201,12 @@ def _debug_print_prompt_payload(
         lines.append(f"  decision_class={ex.get('decision_class')}")
         lines.append(f"  few_shot_rank={ex.get('few_shot_rank')}")
         lines.append(f"  similarity_score={ex.get('similarity_score')}")
-        lines.append(f"  selected_sentences_readable={ex.get('selected_sentences_readable')}")
-        lines.append(f"  selected_sentences_ranked_ordered={ex.get('selected_sentences_ranked_ordered')}")
+        lines.append(
+            f"  selected_sentences_readable={ex.get('selected_sentences_readable')}"
+        )
+        lines.append(
+            f"  selected_sentences_ranked_ordered={ex.get('selected_sentences_ranked_ordered')}"
+        )
     lines.append("[DEBUG PROMPT] messages:")
     for msg in messages:
         lines.append(f"\n[{msg.get('role', 'unknown').upper()}]")
@@ -184,8 +222,6 @@ def _debug_print_prompt_payload(
         print(f"[DEBUG] Prompt payload written to {output_path}")
     else:
         print(output)
-
-
 
 
 def _truncate_text_to_budget(text: str, text_token_budget: int) -> tuple[str, bool]:
@@ -226,7 +262,67 @@ def run_gold_test_predictions_llm(
     request_timeout: int = 600,
     run_name: str | None = None,
 ) -> dict:
-    """Run LLM inference on gold-test cases and return predictions/probabilities."""
+    """Run LLM inference on gold-test cases and return predictions/probabilities.
+
+    For every case in the gold-test split, builds a stage-appropriate prompt
+    (optionally substituting a smart-truncated summary for the full text and
+    injecting retrieved few-shot examples), guards against exceeding
+    `max_prompt_tokens` by truncating the case text (head+tail) when needed,
+    calls `OllamaClient.chat_with_validation` to get a validated
+    `predicted_label`, and accumulates one-hot predictions.
+
+    Args:
+        case_type: Either "dv" or "boc".
+        model_short: Short model key into `config.OLLAMA_MODELS`.
+        stage: One of "zero_shot", "few_shot", "cot", "few_shot_cot"
+            (resolved via `_get_prompt_builder`).
+        max_cases: Optional cap on the number of gold-test cases to run
+            (first N); ignored if `debug_prompt_case_id` is set.
+        ollama_options: Optional Ollama decoding options (seed, temperature,
+            top_k, num_ctx, ...) passed through to every chat call.
+        trace_gateway: Optional `InferenceTraceGateway` used to log each
+            attempt's reasoning/output per case.
+        max_prompt_tokens: Approximate token budget for the full prompt
+            (system+user); if exceeded, the case text is truncated and the
+            prompt rebuilt.
+        smart_truncated_texts: Optional DataFrame with `n_processo` and
+            `summary_text` columns; when a case id matches and its summary is
+            non-empty, that summary text replaces the full case text in the
+            prompt.
+        few_shot_examples_by_case: Required (and validated per-case) when
+            `stage` is "few_shot" or "few_shot_cot": mapping from case id to
+            its list of few-shot example dicts.
+        debug_prompt: If True, prints/writes the assembled prompt payload for
+            one case (the first processed, or `debug_prompt_case_id` if set)
+            before calling Ollama.
+        debug_prompt_case_id: Optional `n_processo` to restrict the run to a
+            single case, for debugging.
+        debug_output_path: Optional file path to write the debug prompt
+            payload to, instead of stdout.
+        request_timeout: HTTP read timeout (seconds) for each Ollama chat
+            request.
+        run_name: Optional run tag recorded in trace log context.
+
+    Returns:
+        Dict with keys:
+            "y_pred": int64 ndarray of predicted class indices.
+            "y_true": int64 ndarray of gold class indices.
+            "y_proba": float32 ndarray of shape (n_cases, n_classes), one-hot
+                at the predicted class (i.e. not calibrated probabilities —
+                Ollama's deterministic JSON output yields a single label per
+                case, not a distribution).
+            "n_processo": array of case identifiers, in split order.
+
+    Raises:
+        ValueError: If `max_prompt_tokens` or `request_timeout` is not
+            positive; if `smart_truncated_texts` is missing required columns;
+            if `debug_prompt_case_id` does not match any gold-test case; or
+            if `max_cases` is not positive when provided.
+        RuntimeError: If the configured Ollama model is not available
+            locally, or if inference fails for any case (including missing
+            few-shot examples for a case when `stage` requires them) — the
+            original exception is chained with the failing case id.
+    """
     if max_prompt_tokens <= 0:
         raise ValueError("max_prompt_tokens must be a positive integer.")
     if request_timeout <= 0:
@@ -306,7 +402,11 @@ def run_gold_test_predictions_llm(
     print(f"Running {stage} inference with model '{model_short}' ({model_tag}) ...")
     trunc_count = 0
     smart_used_count = 0
-    for idx, (case_id, text) in tqdm(enumerate(zip(n_processo, texts), start=1), desc=f'Classification of {case_type}',total=len(texts)):
+    for idx, (case_id, text) in tqdm(
+        enumerate(zip(n_processo, texts), start=1),
+        desc=f"Classification of {case_type}",
+        total=len(texts),
+    ):
         try:
             case_id_str = str(case_id)
             text_for_prompt = text
@@ -317,7 +417,11 @@ def run_gold_test_predictions_llm(
                     text_for_prompt = candidate
                     smart_flag = True
                     smart_used_count += 1
-            examples = few_shot_examples_by_case.get(case_id_str, []) if few_shot_examples_by_case else []
+            examples = (
+                few_shot_examples_by_case.get(case_id_str, [])
+                if few_shot_examples_by_case
+                else []
+            )
             if stage in {"few_shot", "few_shot_cot"} and not examples:
                 raise ValueError(
                     f"Missing few-shot examples for case '{case_id_str}'. "
@@ -454,7 +558,22 @@ def save_predictions_parquet_llm(
     stage: str,
     run_name: str | None = None,
 ) -> Path:
-    """Save LLM predictions to parquet using the agreed schema."""
+    """Save LLM predictions to parquet using the agreed schema.
+
+    Args:
+        results: Dict as returned by `run_gold_test_predictions_llm`, with
+            keys "n_processo", "y_true", "y_pred", "y_proba".
+        case_type: Either "dv" or "boc"; used both for the output subpath
+            and to select the class names for `proba_<label>` columns.
+        model_short: Short model key; used to name the output subdirectory
+            `LLM_OUTPUT_DIR/<model_short>/`.
+        stage: Pipeline stage; used in the output filename.
+        run_name: Optional run tag stored in the `run_name` column.
+
+    Returns:
+        Path the parquet file was written to:
+        `LLM_OUTPUT_DIR/<model_short>/<stage>_<case_type>_predictions.parquet`.
+    """
     output_dir = LLM_OUTPUT_DIR / model_short
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -482,6 +601,7 @@ def save_predictions_parquet_llm(
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the gold-test inference/evaluation run."""
     parser = argparse.ArgumentParser(
         description="Run LLM gold-test inference and evaluation (Slice 3)."
     )
@@ -639,10 +759,20 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """CLI entry point: run gold-test LLM inference, save predictions, and evaluate.
+
+    Parses CLI args, builds deterministic Ollama decoding options, optionally
+    loads a smart-truncated-text parquet and/or builds or loads a few-shot
+    example mapping, runs `run_gold_test_predictions_llm`, saves the
+    predictions via `save_predictions_parquet_llm`, then runs bootstrap
+    classification evaluation and saves a forest plot.
+    """
     args = _parse_args()
 
     if args.shap or args.shap_cases:
-        print("[INFO] --shap and --shap_cases are reserved for Slice 7 and ignored in Slice 3.")
+        print(
+            "[INFO] --shap and --shap_cases are reserved for Slice 7 and ignored in Slice 3."
+        )
 
     ollama_options = _build_ollama_options(
         seed=args.seed,
@@ -676,14 +806,30 @@ def main() -> None:
     if args.few_shot_examples_path:
         few_shot_path = Path(args.few_shot_examples_path)
         if not few_shot_path.exists():
-            raise FileNotFoundError(f"few_shot_examples_path not found: {few_shot_path}")
+            raise FileNotFoundError(
+                f"few_shot_examples_path not found: {few_shot_path}"
+            )
         with few_shot_path.open("r", encoding="utf-8") as fh:
             few_shot_examples_by_case = json.load(fh)
-        print(f"Loaded few-shot examples mapping -> {few_shot_path} (cases={len(few_shot_examples_by_case)})")
+        print(
+            f"Loaded few-shot examples mapping -> {few_shot_path} (cases={len(few_shot_examples_by_case)})"
+        )
     elif args.stage in {"few_shot", "few_shot_cot"}:
-        query_path = Path(args.few_shot_query_path) if args.few_shot_query_path else _default_enriched_path(args.case_type, "gold_test")
-        candidate_path = Path(args.few_shot_candidates_path) if args.few_shot_candidates_path else _default_enriched_path(args.case_type, "train_before_cutoff")
-        output_path = Path(args.few_shot_examples_output_path) if args.few_shot_examples_output_path else None
+        query_path = (
+            Path(args.few_shot_query_path)
+            if args.few_shot_query_path
+            else _default_enriched_path(args.case_type, "gold_test")
+        )
+        candidate_path = (
+            Path(args.few_shot_candidates_path)
+            if args.few_shot_candidates_path
+            else _default_enriched_path(args.case_type, "train_before_cutoff")
+        )
+        output_path = (
+            Path(args.few_shot_examples_output_path)
+            if args.few_shot_examples_output_path
+            else None
+        )
         few_shot_examples_by_case = _build_few_shot_examples_mapping(
             query_path,
             candidate_path,
@@ -699,7 +845,9 @@ def main() -> None:
         debug_output_path = Path(args.debug_output_path)
     elif args.debug_prompt_case_id and args.debug_prompt:
         debug_dir = LLM_OUTPUT_DIR / args.model / "debug"
-        debug_output_path = debug_dir / f"debug_prompt_{args.debug_prompt_case_id}_{args.stage}.txt"
+        debug_output_path = (
+            debug_dir / f"debug_prompt_{args.debug_prompt_case_id}_{args.stage}.txt"
+        )
 
     results = run_gold_test_predictions_llm(
         case_type=args.case_type,

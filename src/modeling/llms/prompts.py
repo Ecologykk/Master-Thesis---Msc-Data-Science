@@ -1,8 +1,4 @@
-"""
-prompts.py
-==========
-
-Prompt template factory for all LLM pipeline stages.
+"""Prompt template factory for all LLM pipeline stages.
 
 The model receives the full judgment text from `texto_integral_sem_decisao`,
 which contains the Relatório (case report) and Fundamentação (legal reasoning,
@@ -46,7 +42,7 @@ _SYSTEM_DV = (
     "4. Emite exclusivamente o JSON de classificação no formato indicado."
     "\n\n"
     "DEVES:\n"
-    "- Usar exatamente uma das labels válidas no campo \"predicted_label\"\n"
+    '- Usar exatamente uma das labels válidas no campo "predicted_label"\n'
     "- Basear a classificação apenas no texto fornecido\n"
     "- Emitir JSON sintaticamente válido como única e exclusiva resposta"
     "\n\n"
@@ -57,9 +53,9 @@ _SYSTEM_DV = (
     "- Recusar classificar ou pedir mais informação — classifica sempre com base no texto disponível"
     "\n\n"
     "Classes válidas:\n"
-    "- \"decisao_mantida\": o tribunal de recurso confirma e mantém a decisão do tribunal "
+    '- "decisao_mantida": o tribunal de recurso confirma e mantém a decisão do tribunal '
     "de 1.ª instância — o recorrente não obtém qualquer alteração favorável\n"
-    "- \"decisao_alterada\": o tribunal de recurso revoga, modifica ou substitui a decisão "
+    '- "decisao_alterada": o tribunal de recurso revoga, modifica ou substitui a decisão '
     "do tribunal de 1.ª instância, parcial ou totalmente"
     "\n\n"
     "Contexto:\n"
@@ -69,7 +65,7 @@ _SYSTEM_DV = (
     "o teu papel é inferi-lo a partir da análise jurídica presente na Fundamentação."
     "\n\n"
     "Formato de resposta obrigatório (sem texto antes ou depois):\n"
-    "{\"predicted_label\": \"<LABEL>\"}"
+    '{"predicted_label": "<LABEL>"}'
 )
 
 _SYSTEM_BOC = (
@@ -94,7 +90,7 @@ _SYSTEM_BOC = (
     "4. Emite exclusivamente o JSON de classificação no formato indicado."
     "\n\n"
     "DEVES:\n"
-    "- Usar exatamente uma das labels válidas no campo \"predicted_label\"\n"
+    '- Usar exatamente uma das labels válidas no campo "predicted_label"\n'
     "- Basear a classificação apenas no texto fornecido\n"
     "- Emitir JSON sintaticamente válido como única e exclusiva resposta"
     "\n\n"
@@ -105,11 +101,11 @@ _SYSTEM_BOC = (
     "- Recusar classificar ou pedir mais informação — classifica sempre com base no texto disponível"
     "\n\n"
     "Classes válidas (do ponto de vista do recorrente):\n"
-    "- \"decisao_desfavoravel\": o recurso é julgado totalmente improcedente — "
+    '- "decisao_desfavoravel": o recurso é julgado totalmente improcedente — '
     "o tribunal de recurso não altera nenhum ponto da decisão recorrida em favor do recorrente\n"
-    "- \"decisao_parcial\": o recurso é julgado parcialmente procedente — "
+    '- "decisao_parcial": o recurso é julgado parcialmente procedente — '
     "o tribunal altera alguns pontos da decisão recorrida, mas não acolhe todos os pedidos do recorrente\n"
-    "- \"decisao_favoravel\": o recurso é julgado totalmente procedente — "
+    '- "decisao_favoravel": o recurso é julgado totalmente procedente — '
     "o tribunal acolhe integralmente os fundamentos do recorrente e altera a decisão recorrida"
     "\n\n"
     "Contexto:\n"
@@ -119,11 +115,11 @@ _SYSTEM_BOC = (
     "o teu papel é inferi-lo a partir da análise jurídica presente na Fundamentação."
     "\n\n"
     "Formato de resposta obrigatório (sem texto antes ou depois):\n"
-    "{\"predicted_label\": \"<LABEL>\"}"
+    '{"predicted_label": "<LABEL>"}'
 )
 
 _SYSTEM_PROMPTS: dict[str, str] = {
-    "dv":  _SYSTEM_DV,
+    "dv": _SYSTEM_DV,
     "boc": _SYSTEM_BOC,
 }
 
@@ -153,7 +149,7 @@ _COT_INSTRUCTION = (
     "PASSO 3 — JURISPRUDÊNCIA:\n"
     "Lista os acórdãos ou decisões jurisprudenciais citados (STJ, TRC, TRP, TRL, etc.) "
     "e sintetiza em que sentido são invocados. Se não existir jurisprudência citada, "
-    "indica explicitamente \"Sem jurisprudência citada.\""
+    'indica explicitamente "Sem jurisprudência citada."'
     "\n\n"
     "PASSO 4 — APRECIAÇÃO:\n"
     "Com base nos factos, legislação e jurisprudência identificados, avalia se os "
@@ -163,14 +159,16 @@ _COT_INSTRUCTION = (
     "PASSO 5 — CLASSIFICAÇÃO:\n"
     "Indica a label que melhor corresponde ao resultado e emite o JSON na linha seguinte, "
     "sem qualquer texto adicional depois:\n"
-    "{\"predicted_label\": \"<LABEL>\"}"
+    '{"predicted_label": "<LABEL>"}'
 )
 
 # ---------------------------------------------------------------------------
 # User message builders
 # ---------------------------------------------------------------------------
 
+
 def _user_message(n_processo: str, text: str, *, smart_truncated: bool = False) -> str:
+    """Build the user-turn text: process id, optional truncation note, and case text."""
     trunc_note = ""
     if smart_truncated:
         trunc_note = (
@@ -179,15 +177,14 @@ def _user_message(n_processo: str, text: str, *, smart_truncated: bool = False) 
             "semântico e padrões linguísticos de fundamentação jurídica. "
             "A ordem apresentada mantém a ordem original dessas frases no acórdão.\n\n"
         )
-    return (
-        f"Processo: {n_processo}\n\n"
-        f"{trunc_note}"
-        f"Texto da decisão:\n{text}"
-    )
+    return f"Processo: {n_processo}\n\n" f"{trunc_note}" f"Texto da decisão:\n{text}"
 
 
 def _example_text(example: dict) -> str:
-    selected = example.get("selected_sentences_readable") or example.get("selected_sentences_ranked_ordered")
+    """Return the display text for a few-shot example, preferring pre-selected sentences over raw text."""
+    selected = example.get("selected_sentences_readable") or example.get(
+        "selected_sentences_ranked_ordered"
+    )
     if isinstance(selected, list) and selected:
         return "\n".join(f"- {sent}" for sent in selected)
     return str(example.get("text", ""))
@@ -210,6 +207,7 @@ def _few_shot_block(examples: list[dict]) -> str:
 # Public builders — return OpenAI-style message list
 # ---------------------------------------------------------------------------
 
+
 def build_zero_shot_prompt(
     case_type: str,
     n_processo: str,
@@ -217,10 +215,28 @@ def build_zero_shot_prompt(
     *,
     smart_truncated: bool = False,
 ) -> list[dict]:
-    """Zero-shot: judge persona + task instructions in system, case text in user."""
+    """Zero-shot: judge persona + task instructions in system, case text in user.
+
+    Args:
+        case_type: Either "dv" (domestic violence) or "boc" (breach of
+            contract); selects which system prompt/label set is used.
+        n_processo: Case process number, included in the user message.
+        text: Case judgment text (Relatório + Fundamentação, dispositivo
+            already excluded).
+        smart_truncated: If True, prepends a note to the user message stating
+            that `text` was automatically truncated to the most relevant
+            sentences rather than being the full document.
+
+    Returns:
+        OpenAI-style message list `[{"role": "system", ...}, {"role": "user", ...}]`
+        ready to pass to `OllamaClient.chat`.
+    """
     return [
         {"role": "system", "content": _SYSTEM_PROMPTS[case_type]},
-        {"role": "user",   "content": _user_message(n_processo, text, smart_truncated=smart_truncated)},
+        {
+            "role": "user",
+            "content": _user_message(n_processo, text, smart_truncated=smart_truncated),
+        },
     ]
 
 
@@ -232,15 +248,35 @@ def build_few_shot_prompt(
     *,
     smart_truncated: bool = False,
 ) -> list[dict]:
-    """Few-shot: judge persona + task in system, examples + target case in user."""
-    user_content = _few_shot_block(examples) + "\n" + _user_message(
-        n_processo,
-        text,
-        smart_truncated=smart_truncated,
+    """Few-shot: judge persona + task in system, examples + target case in user.
+
+    Args:
+        case_type: Either "dv" or "boc"; selects the system prompt/label set.
+        n_processo: Case process number, included in the user message.
+        text: Case judgment text of the case to classify.
+        examples: List of few-shot example dicts, each with keys
+            `"n_processo"`, `"label"`, and text under either
+            `"selected_sentences_readable"`, `"selected_sentences_ranked_ordered"`,
+            or `"text"` (see `_example_text`).
+        smart_truncated: If True, notes in the user message that `text` was
+            automatically truncated to the most relevant sentences.
+
+    Returns:
+        OpenAI-style message list with the formatted examples block followed
+        by the target case prepended to the user content.
+    """
+    user_content = (
+        _few_shot_block(examples)
+        + "\n"
+        + _user_message(
+            n_processo,
+            text,
+            smart_truncated=smart_truncated,
+        )
     )
     return [
         {"role": "system", "content": _SYSTEM_PROMPTS[case_type]},
-        {"role": "user",   "content": user_content},
+        {"role": "user", "content": user_content},
     ]
 
 
@@ -251,11 +287,28 @@ def build_cot_prompt(
     *,
     smart_truncated: bool = False,
 ) -> list[dict]:
-    """CoT: judge persona + task + Step-Back/CoT reasoning instruction in system."""
+    """CoT: judge persona + task + Step-Back/CoT reasoning instruction in system.
+
+    Args:
+        case_type: Either "dv" or "boc"; selects the system prompt/label set.
+        n_processo: Case process number, included in the user message.
+        text: Case judgment text to classify.
+        smart_truncated: If True, notes in the user message that `text` was
+            automatically truncated to the most relevant sentences.
+
+    Returns:
+        OpenAI-style message list whose system message appends the
+        `_COT_INSTRUCTION` (Step-Back + structured CoT) block after the base
+        system prompt, instructing the model to reason step-by-step before
+        emitting the final classification JSON.
+    """
     system = _SYSTEM_PROMPTS[case_type] + _COT_INSTRUCTION
     return [
         {"role": "system", "content": system},
-        {"role": "user",   "content": _user_message(n_processo, text, smart_truncated=smart_truncated)},
+        {
+            "role": "user",
+            "content": _user_message(n_processo, text, smart_truncated=smart_truncated),
+        },
     ]
 
 
@@ -267,16 +320,34 @@ def build_few_shot_cot_prompt(
     *,
     smart_truncated: bool = False,
 ) -> list[dict]:
-    """Few-shot + CoT: judge persona + task + reasoning instruction in system."""
+    """Few-shot + CoT: judge persona + task + reasoning instruction in system.
+
+    Args:
+        case_type: Either "dv" or "boc"; selects the system prompt/label set.
+        n_processo: Case process number, included in the user message.
+        text: Case judgment text of the case to classify.
+        examples: List of few-shot example dicts (see `build_few_shot_prompt`).
+        smart_truncated: If True, notes in the user message that `text` was
+            automatically truncated to the most relevant sentences.
+
+    Returns:
+        OpenAI-style message list combining the CoT-augmented system prompt
+        with a user message containing the few-shot examples block followed
+        by the target case.
+    """
     system = _SYSTEM_PROMPTS[case_type] + _COT_INSTRUCTION
-    user_content = _few_shot_block(examples) + "\n" + _user_message(
-        n_processo,
-        text,
-        smart_truncated=smart_truncated,
+    user_content = (
+        _few_shot_block(examples)
+        + "\n"
+        + _user_message(
+            n_processo,
+            text,
+            smart_truncated=smart_truncated,
+        )
     )
     return [
         {"role": "system", "content": system},
-        {"role": "user",   "content": user_content},
+        {"role": "user", "content": user_content},
     ]
 
 
@@ -306,8 +377,16 @@ if __name__ == "__main__":
         print(f"\n[{m['role'].upper()}]\n{m['content']}")
 
     sample_examples = [
-        {"n_processo": "EX-001", "text": "Exemplo de texto A.", "label": "decisao_mantida"},
-        {"n_processo": "EX-002", "text": "Exemplo de texto B.", "label": "decisao_alterada"},
+        {
+            "n_processo": "EX-001",
+            "text": "Exemplo de texto A.",
+            "label": "decisao_mantida",
+        },
+        {
+            "n_processo": "EX-002",
+            "text": "Exemplo de texto B.",
+            "label": "decisao_alterada",
+        },
     ]
     print("\n" + "=" * 70)
     print("FEW-SHOT (DV)")

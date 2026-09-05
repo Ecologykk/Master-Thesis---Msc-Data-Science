@@ -1,8 +1,4 @@
-"""
-client.py
-=========
-
-Thin wrapper around the Ollama REST API.
+"""Thin wrapper around the Ollama REST API.
 
 Provides
 --------
@@ -31,19 +27,22 @@ Usage
     response = client.chat("deepseek-r1:8b", [{"role": "user", "content": "Olá"}])
 """
 
-from datetime import datetime
 import json
-from pathlib import Path
 import re
 import time
+from datetime import datetime
+from pathlib import Path
 
 import requests
-
-from config import OLLAMA_BASE_URL, MAX_RETRIES
+from config import MAX_RETRIES, OLLAMA_BASE_URL
 
 # Regex to strip DeepSeek-R1 chain-of-thought blocks
-_THINK_RE = re.compile(r"<(?:think|thinking)>.*?</(?:think|thinking)>", re.DOTALL | re.IGNORECASE)
-_THINK_CAPTURE_RE = re.compile(r"<(?:think|thinking)>(.*?)</(?:think|thinking)>", re.DOTALL | re.IGNORECASE)
+_THINK_RE = re.compile(
+    r"<(?:think|thinking)>.*?</(?:think|thinking)>", re.DOTALL | re.IGNORECASE
+)
+_THINK_CAPTURE_RE = re.compile(
+    r"<(?:think|thinking)>(.*?)</(?:think|thinking)>", re.DOTALL | re.IGNORECASE
+)
 
 
 def _strip_think(text: str) -> str:
@@ -53,7 +52,9 @@ def _strip_think(text: str) -> str:
 
 def _extract_think(text: str) -> str:
     """Extract and concatenate any <think>...</think> blocks from model output."""
-    chunks = [chunk.strip() for chunk in _THINK_CAPTURE_RE.findall(text) if chunk.strip()]
+    chunks = [
+        chunk.strip() for chunk in _THINK_CAPTURE_RE.findall(text) if chunk.strip()
+    ]
     return "\n\n".join(chunks)
 
 
@@ -66,11 +67,7 @@ def _compose_raw_content(message: dict) -> str:
     so existing extraction/stripping code works unchanged.
     """
     content = str(message.get("content", "") or "")
-    thinking = str(
-        message.get("thinking", "")
-        or message.get("reasoning", "")
-        or ""
-    )
+    thinking = str(message.get("thinking", "") or message.get("reasoning", "") or "")
 
     if not thinking:
         return content
@@ -85,6 +82,13 @@ class InferenceTraceGateway:
     """Append per-case inference traces (reasoning + final output) to text logs."""
 
     def __init__(self, base_dir: Path | str | None = None) -> None:
+        """Create the gateway and ensure its log directory exists.
+
+        Args:
+            base_dir: Directory under which per-model trace files are written.
+                Defaults to `<repo_root>/data/models/llms/thinking_logs` when
+                not provided.
+        """
         if base_dir is None:
             base_dir = (
                 Path(__file__).resolve().parents[3]
@@ -98,6 +102,7 @@ class InferenceTraceGateway:
 
     @staticmethod
     def _safe_fragment(value: str) -> str:
+        """Sanitize a string into a filesystem-safe filename fragment."""
         safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value)).strip("_")
         return safe or "unknown"
 
@@ -108,6 +113,21 @@ class InferenceTraceGateway:
         case_type: str,
         run_name: str | None = None,
     ) -> Path:
+        """Compute the trace file path for a given model/stage/case_type/run.
+
+        Args:
+            model: Short or full model identifier used to name the log's
+                parent subdirectory.
+            stage: Pipeline stage (e.g. "zero_shot", "few_shot", "cot").
+            case_type: Case type ("dv" or "boc").
+            run_name: Optional run tag appended to the filename to keep
+                traces from different runs separate.
+
+        Returns:
+            Path to the trace text file, under `self.base_dir/<model>/`,
+            named `<stage>_<case_type>[_<run_name>].txt`. The file itself is
+            not created by this method.
+        """
         model_name = self._safe_fragment(model)
         stage_name = self._safe_fragment(stage)
         case_name = self._safe_fragment(case_type)
@@ -131,6 +151,26 @@ class InferenceTraceGateway:
         error_message: str | None = None,
         run_name: str | None = None,
     ) -> Path:
+        """Append one trace entry (reasoning + final output) to the case's log file.
+
+        Args:
+            model: Short or full model identifier (passed to `get_log_path`).
+            stage: Pipeline stage (e.g. "zero_shot", "few_shot", "cot").
+            case_type: Case type ("dv" or "boc").
+            case_id: Case identifier (`n_processo`) the trace belongs to.
+            attempt: 1-based retry attempt number for this trace entry.
+            status: Free-form status string (e.g. "ok", "error").
+            reasoning: Extracted `<think>` reasoning text; written as
+                "[no <think> block returned]" if empty.
+            final_output: Final (post-stripping) model output text; written
+                as "[empty output]" if empty.
+            error_message: Optional error message to record, if this attempt
+                failed.
+            run_name: Optional run tag (passed to `get_log_path`).
+
+        Returns:
+            Path to the trace file the entry was appended to.
+        """
         path = self.get_log_path(
             model=model,
             stage=stage,
@@ -166,6 +206,12 @@ class OllamaClient:
     """Minimal Ollama REST client for chat-completion requests."""
 
     def __init__(self, base_url: str = OLLAMA_BASE_URL) -> None:
+        """Create the client and its underlying HTTP session.
+
+        Args:
+            base_url: Base URL of the Ollama server (trailing slash stripped).
+                Defaults to `OLLAMA_BASE_URL` from config.
+        """
         self.base_url = base_url.rstrip("/")
         self._session = requests.Session()
 
@@ -210,7 +256,9 @@ class OllamaClient:
                     except ValueError:
                         err_msg = resp.text
                     err_lower = err_msg.lower()
-                    if "think" in err_lower and ("unknown" in err_lower or "invalid" in err_lower):
+                    if "think" in err_lower and (
+                        "unknown" in err_lower or "invalid" in err_lower
+                    ):
                         payload.pop("think", None)
                         resp = self._session.post(
                             f"{self.base_url}/api/chat",
@@ -229,7 +277,7 @@ class OllamaClient:
                     raise RuntimeError(
                         f"Ollama chat failed after {MAX_RETRIES} attempts: {exc}"
                     ) from exc
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
 
     def chat(
         self,
@@ -243,17 +291,22 @@ class OllamaClient:
     ) -> str:
         """Send a chat request; return the stripped assistant content string.
 
-        Parameters
-        ----------
-        model    : Ollama model tag, e.g. "deepseek-r1:8b"
-        messages : OpenAI-style message list [{"role": ..., "content": ...}]
-        format   : Ollama response format — "json" enforces JSON output mode
-        options  : optional Ollama decoding options (seed, temperature, ...)
-        timeout  : request timeout in seconds
+        Args:
+            model: Ollama model tag, e.g. "deepseek-r1:8b".
+            messages: OpenAI-style message list `[{"role": ..., "content": ...}]`.
+            format: Ollama response format — "json" enforces JSON output mode.
+            options: Optional Ollama decoding options (seed, temperature, ...).
+            enable_thinking: Whether to request the model's `<think>` reasoning
+                (sent as `think: true`); falls back automatically if the
+                server rejects the `think` field.
+            timeout: Request timeout in seconds.
 
-        Returns
-        -------
-        str — assistant reply with <think> blocks removed
+        Returns:
+            Assistant reply with `<think>` blocks removed.
+
+        Raises:
+            RuntimeError: If the request still fails (connection error, missing
+                `message` object, etc.) after `MAX_RETRIES` attempts.
         """
         raw = self._chat_raw(
             model=model,
@@ -281,11 +334,31 @@ class OllamaClient:
         """Chat + validate that returned JSON contains a recognised predicted_label.
 
         Retries up to MAX_RETRIES times if the JSON is unparseable or the
-        predicted_label is not in valid_labels.
+        `predicted_label` value is not in `valid_labels`. When `trace_gateway`
+        and `trace_context` are both provided, every attempt (successful or
+        not) is appended to the per-case trace log via `InferenceTraceGateway`.
 
-        Returns
-        -------
-        dict — parsed JSON response body
+        Args:
+            model: Ollama model tag, e.g. "deepseek-r1:8b".
+            messages: OpenAI-style message list `[{"role": ..., "content": ...}]`.
+            valid_labels: Set of label strings accepted in `predicted_label`.
+            format: Ollama response format — "json" enforces JSON output mode.
+            options: Optional Ollama decoding options (seed, temperature, ...).
+            enable_thinking: Whether to request the model's `<think>` reasoning.
+            trace_gateway: Optional gateway used to log each attempt's
+                reasoning and output.
+            trace_context: Optional dict with keys among "model", "stage",
+                "case_type", "case_id", "run_name", used to fill in the trace
+                log entry; falls back to "unknown_*" placeholders when a key
+                is absent.
+            timeout: Request timeout in seconds.
+
+        Returns:
+            Parsed JSON response body (containing at least `predicted_label`).
+
+        Raises:
+            RuntimeError: If no attempt produces valid, recognised JSON within
+                `MAX_RETRIES` tries; chains the last encountered exception.
         """
         last_exc: Exception | None = None
         for attempt in range(1, MAX_RETRIES + 1):
@@ -340,13 +413,21 @@ class OllamaClient:
                     )
 
                 if attempt < MAX_RETRIES:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
         raise RuntimeError(
             f"chat_with_validation failed after {MAX_RETRIES} attempts: {last_exc}"
         ) from last_exc
 
     def check_model_available(self, model_name: str) -> bool:
-        """Return True if model_name is present in the local Ollama model list."""
+        """Return True if model_name is present in the local Ollama model list.
+
+        Args:
+            model_name: Full Ollama model tag to look for, e.g. "deepseek-r1:8b".
+
+        Returns:
+            True if `model_name` appears in the server's `/api/tags` listing;
+            False if it does not, or if the request itself fails.
+        """
         try:
             resp = self._session.get(f"{self.base_url}/api/tags", timeout=10)
             resp.raise_for_status()

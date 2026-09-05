@@ -3,6 +3,14 @@ from pathlib import Path
 
 
 def limpar_tribunal_jp(json_file):
+    """Remove o sufixo '_DECISÃO_TEXTO_INTEGRAL' do campo 'tribunal' em cada registo do JSON.
+
+    Carrega o ficheiro JSON, limpa o campo 'tribunal' de cada item (quando
+    presente e não vazio) e grava o resultado de volta no mesmo ficheiro.
+
+    Args:
+        json_file (str or Path): Caminho para o ficheiro JSON a corrigir.
+    """
     with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -18,5 +26,5 @@ def limpar_tribunal_jp(json_file):
 
 # Usar
 limpar_tribunal_jp(
-    Path(f"./../../data/dgsi_incumprimento_contratos_20251028_130853.json")
+    Path("./../../data/dgsi_incumprimento_contratos_20251028_130853.json")
 )

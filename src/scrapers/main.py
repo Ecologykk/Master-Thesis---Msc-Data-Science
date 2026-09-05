@@ -1,5 +1,4 @@
-"""
-Legal Document Scraper - Orchestration Script
+"""Legal Document Scraper - Orchestration Script.
 
 This script provides an interactive command-line interface for scraping legal documents
 from Portuguese courts using specialized scrapers for different case types. It was developed to perform research
@@ -24,25 +23,68 @@ Author: Helton Mendonça
 Transparency Note: This code was optimized and polished using AI assistance(mainly Claude 4.0 and 4.5). However, all the logic, structure and final review were done by the author.
 
 Date: October 13th 2025
+
+Corpus snapshot warning
+------------------------
+The corpus used in this dissertation was scraped in November 2025 and therefore contains only
+cases published up to that date. Re-running this scraper today will return a larger and
+different set of cases, because the source databases are continuously updated. It will
+therefore not reproduce the exact dataset counts or evaluation figures reported in the thesis.
+To reproduce the published results, use the archived corpus from the Zenodo record (see
+docs/09-reproducibility-notes.md) rather than re-scraping.
+
+CLI usage
+---------
+With no arguments, the original interactive text menu runs unchanged. Passing
+--case-type/--court skips that menu and the "how many links to process" prompt, going straight
+to the matching court's Selenium link-extraction flow; --limit caps how many of the extracted
+links get scraped (the browser still opens and still needs a human to search and click the
+right descriptor, same as the fully interactive flow -- only the text-menu prompts are skipped):
+
+    python src/scrapers/main.py --case-type dv --court trp --limit 3
+    python src/scrapers/main.py                                       # menu, as before
 """
 
+import argparse
 import asyncio
 import json
 import re
 import time
 from datetime import datetime
 from pathlib import Path
+
 from bs4 import BeautifulSoup
+from contract_breach_scraper import ContractBreachScraper
+from domestic_violence_scraper import DomesticViolenceScraper
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from domestic_violence_scraper import DomesticViolenceScraper
-from contract_breach_scraper import ContractBreachScraper
+
+# case-type/court combination -> the interactive menu choice ("1".."6") it corresponds to.
+# Mirrors the branches in LegalDocumentOrchestrator.run().
+_CASE_TYPE_COURT_TO_CHOICE = {
+    ("dv", "TRE"): "1",
+    ("dv", "TRL"): "1",
+    ("dv", "TRC"): "1",
+    ("dv", "TRG"): "1",
+    ("dv", "TRP"): "1",
+    ("dv", "STJ"): "1",
+    ("dv", "CSM"): "6",
+    ("boc", "JP"): "2",
+    ("boc", "TRE"): "3",
+    ("boc", "TRL"): "3",
+    ("boc", "TRC"): "3",
+    ("boc", "TRG"): "3",
+    ("boc", "TRP"): "3",
+    ("boc", "STJ"): "4",
+    ("boc", "CSM"): "5",
+}
 
 
 class LegalDocumentOrchestrator:
-    """
-    Orchestrates the scraping process for different types of legal documents.
-    Simplified workflow: interactive link extraction -> user selects quantity -> sequential scraping.
+    """Orchestrates the scraping process for different types of legal documents.
+
+    Simplified workflow: interactive link extraction -> user selects quantity
+    -> sequential scraping.
     """
 
     def __init__(self):
@@ -64,9 +106,43 @@ class LegalDocumentOrchestrator:
         self.court_url_jp = "https://www.dgsi.pt/cajp.nsf/Pesquisa+Campo?OpenForm"
         self.court_url_csm = "https://jurisprudencia.csm.org.pt/"
 
-    def extract_links_interactive(self, search_type, tribunal_url, tribunal_id):
+    def _resolve_num_to_scrape(self, total, preset_limit):
+        """Resolve how many extracted links to scrape, from a CLI preset or an interactive prompt.
+
+        Args:
+            total: Number of links extracted so far.
+            preset_limit: `--limit` value from the CLI, or None to prompt interactively instead.
+
+        Returns:
+            Number of links to scrape, capped at `total`.
         """
-        Extract judgment links interactively using Selenium.
+        if preset_limit is not None:
+            num_to_scrape = min(int(preset_limit), total)
+            print(
+                f"\n📊 Found {total} links. Using --limit {preset_limit}: scraping {num_to_scrape}."
+            )
+            return num_to_scrape
+
+        response = input(
+            f"\n📊 Found {total} links. How many to process? (number or 'all'): "
+        ).strip()
+        try:
+            if response.lower() == "all":
+                return total
+            num_to_scrape = int(response)
+            if num_to_scrape > total:
+                print(
+                    f"⚠️  Requested ({num_to_scrape}) > total. Processing all ({total})."
+                )
+                return total
+            return num_to_scrape
+        except (ValueError, TypeError):
+            print("⚠️  Invalid input. Processing first 5 by default.")
+            return 5
+
+    def extract_links_interactive(self, search_type, tribunal_url, tribunal_id):
+        """Extract judgment links interactively using Selenium.
+
         User navigates the DGSI website, script extracts links from current page.
 
         Args:
@@ -86,9 +162,9 @@ class LegalDocumentOrchestrator:
 
         try:
             if tribunal_id == "csm":
-                print(f"\n🔍 Opening CSM database page...")
+                print("\n🔍 Opening CSM database page...")
             else:
-                print(f"\n🔍 Opening DGSI search page...")
+                print("\n🔍 Opening DGSI search page...")
             driver.get(tribunal_url)
 
             print("\n✅ Interactive mode - MULTI-PAGE EXTRACTION")
@@ -213,9 +289,9 @@ class LegalDocumentOrchestrator:
                         print("   2. You're on the search page (need to search first)")
                         print("   3. Page is still loading (wait and try again)")
                     else:
-                        print(f"\n✅ Links extracted successfully!")
+                        print("\n✅ Links extracted successfully!")
                         if len(new_links) > 0:
-                            print(f"📝 Examples of new links found:")
+                            print("📝 Examples of new links found:")
                             for i, link in enumerate(list(new_links)[:3]):
                                 print(f"  {i+1}. {link[:100]}...")
 
@@ -348,7 +424,7 @@ class LegalDocumentOrchestrator:
                             print(
                                 f"   ⚠️  Could not find/click 'Próximo' button: {str(e)}"
                             )
-                            print(f"   🔄 Attempting to continue anyway...")
+                            print("   🔄 Attempting to continue anyway...")
 
                             # Try one more time with a different approach
                             try:
@@ -358,7 +434,7 @@ class LegalDocumentOrchestrator:
                                 )
                                 time.sleep(4)
                                 current_page += 1
-                                print(f"   ✅ Successfully clicked via JavaScript")
+                                print("   ✅ Successfully clicked via JavaScript")
                             except Exception as e2:
                                 print(f"   ❌ JavaScript click also failed: {str(e2)}")
                                 break
@@ -391,8 +467,10 @@ class LegalDocumentOrchestrator:
             driver.quit()
 
     async def scrape_documents(self, links, scraper, court_name, case_type):
-        """
-        Scrape documents sequentially from list of URLs.
+        """Scrape documents sequentially from list of URLs.
+
+        Waits 1 second (`asyncio.sleep(1)`) between requests as a politeness delay to the
+        source site. Please keep this delay if you modify this method.
 
         Args:
             links: List of judgment URLs
@@ -451,32 +529,54 @@ class LegalDocumentOrchestrator:
 
         print(f"⚠️  Failed URLs saved to: {filepath}")
 
-    async def run(self):
-        """Main orchestration workflow - simplified like test11.py."""
-        print("=" * 80)
-        print("🏛️  DGSI LEGAL DOCUMENT SCRAPER".center(80))
-        print("=" * 80)
-        print("\n📋 Choose case type:")
-        print(
-            "   1. Courts of Appeal - Domestic Violence  (TRE, TRL, TRC, TRG, TRP, STJ)"
-        )
-        print("   2. Peace Courts - Contract Breach")
-        print("   3. 🔄 Courts of Appeal - Contract Breach  (TRE, TRL, TRC, TRG, TRP)")
-        print("   4. 🔄 Supreme Court - Contract Breach  (STJ)")
-        print("   5. 🔄 CSM Database - Contract Breach  (jurisprudencia.csm.org.pt)")
-        print("   6. 🔄 CSM Database - Domestic Violence  (jurisprudencia.csm.org.pt)")
+    async def run(self, preset_choice=None, preset_court=None, preset_limit=None):
+        """Main orchestration workflow - simplified like test11.py.
 
-        choice = input("\nChoose an option (1-6): ").strip()
+        Args:
+            preset_choice: If given (together with `preset_court`), skips the text menu,
+                going straight to the matching branch below ("1".."6", see
+                `_CASE_TYPE_COURT_TO_CHOICE`). Skipped entirely when None, preserving the
+                original fully-interactive behaviour.
+            preset_court: Court code (e.g. "TRP") to use in place of the "which court" prompt,
+                for branches that ask for one.
+            preset_limit: If given, caps how many extracted links get scraped without prompting
+                "how many to process".
+        """
+        if preset_choice is not None:
+            choice = preset_choice
+            court_code = preset_court
+        else:
+            print("=" * 80)
+            print("🏛️  DGSI LEGAL DOCUMENT SCRAPER".center(80))
+            print("=" * 80)
+            print("\n📋 Choose case type:")
+            print(
+                "   1. Courts of Appeal - Domestic Violence  (TRE, TRL, TRC, TRG, TRP, STJ)"
+            )
+            print("   2. Peace Courts - Contract Breach")
+            print(
+                "   3. 🔄 Courts of Appeal - Contract Breach  (TRE, TRL, TRC, TRG, TRP)"
+            )
+            print("   4. 🔄 Supreme Court - Contract Breach  (STJ)")
+            print(
+                "   5. 🔄 CSM Database - Contract Breach  (jurisprudencia.csm.org.pt)"
+            )
+            print(
+                "   6. 🔄 CSM Database - Domestic Violence  (jurisprudencia.csm.org.pt)"
+            )
+
+            choice = input("\nChoose an option (1-6): ").strip()
+            court_code = None
 
         if choice == "1":
             # DOMESTIC VIOLENCE - COURTS OF APPEAL
-            print("\n🏛️ Available Courts of Appeal:")
-            print(f"   {', '.join(self.court_urls_tr.keys())}")
-            print(
-                f"TRE - Évora | TRL - Lisboa | TRC - Coimbra | TRG - Guimarães | TRP - Porto | STJ - Supremo  "
-            )
-
-            court_code = input(f"\nChoose court: ").strip().upper()
+            if court_code is None:
+                print("\n🏛️ Available Courts of Appeal:")
+                print(f"   {', '.join(self.court_urls_tr.keys())}")
+                print(
+                    "TRE - Évora | TRL - Lisboa | TRC - Coimbra | TRG - Guimarães | TRP - Porto | STJ - Supremo  "
+                )
+                court_code = input("\nChoose court: ").strip().upper()
 
             if court_code not in self.court_urls_tr:
                 print("❌ Invalid court. Exiting.")
@@ -510,24 +610,7 @@ class LegalDocumentOrchestrator:
 
             # Ask how many to process
             total = len(links)
-            response = input(
-                f"\n📊 Found {total} links. How many to process? (number or 'all'): "
-            ).strip()
-
-            try:
-                if response.lower() == "all":
-                    num_to_scrape = total
-                else:
-                    num_to_scrape = int(response)
-                    if num_to_scrape > total:
-                        print(
-                            f"⚠️  Requested ({num_to_scrape}) > total. Processing all ({total})."
-                        )
-                        num_to_scrape = total
-            except (ValueError, TypeError):
-                print("⚠️  Invalid input. Processing first 5 by default.")
-                num_to_scrape = 5
-
+            num_to_scrape = self._resolve_num_to_scrape(total, preset_limit)
             links_to_scrape = links[:num_to_scrape]
 
             # Scrape documents
@@ -537,7 +620,7 @@ class LegalDocumentOrchestrator:
 
             # Results summary
             print("\n" + "=" * 80)
-            print(f"✅ SCRAPING COMPLETE".center(80))
+            print("✅ SCRAPING COMPLETE".center(80))
             print("=" * 80)
             print(f"✅ Successes: {len(documents)}")
             print(f"❌ Failures: {len(failed)}")
@@ -555,7 +638,7 @@ class LegalDocumentOrchestrator:
             url = self.court_url_jp
             tribunal_id = "cajp"
 
-            print(f"\n🎯 Mode: Peace Courts")
+            print("\n🎯 Mode: Peace Courts")
             print(f"📝 Opening: {url}")
             print("💡 Topic: Contract Breach")
 
@@ -568,24 +651,7 @@ class LegalDocumentOrchestrator:
 
             # Ask how many to process
             total = len(links)
-            response = input(
-                f"\n📊 Found {total} links. How many to process? (number or 'all'): "
-            ).strip()
-
-            try:
-                if response.lower() == "all":
-                    num_to_scrape = total
-                else:
-                    num_to_scrape = int(response)
-                    if num_to_scrape > total:
-                        print(
-                            f"⚠️  Requested ({num_to_scrape}) > total. Processing all ({total})."
-                        )
-                        num_to_scrape = total
-            except (ValueError, TypeError):
-                print("⚠️  Invalid input. Processing first 5 by default.")
-                num_to_scrape = 5
-
+            num_to_scrape = self._resolve_num_to_scrape(total, preset_limit)
             links_to_scrape = links[:num_to_scrape]
 
             # Scrape documents
@@ -595,7 +661,7 @@ class LegalDocumentOrchestrator:
 
             # Results summary
             print("\n" + "=" * 80)
-            print(f"✅ SCRAPING COMPLETE".center(80))
+            print("✅ SCRAPING COMPLETE".center(80))
             print("=" * 80)
             print(f"✅ Successes: {len(documents)}")
             print(f"❌ Failures: {len(failed)}")
@@ -610,15 +676,15 @@ class LegalDocumentOrchestrator:
 
         elif choice == "3":
             # CONTRACT BREACH - APPEALS COURTS 🔄
-            print("\n🏛️ Available Courts of Appeal for Contract Breach:")
-            print(
-                f"   {', '.join([k for k in self.court_urls_tr.keys() if k != 'STJ'])}"
-            )
-            print(
-                f"TRE - Évora | TRL - Lisboa | TRC - Coimbra | TRG - Guimarães | TRP - Porto"
-            )
-
-            court_code = input(f"\nChoose court: ").strip().upper()
+            if court_code is None:
+                print("\n🏛️ Available Courts of Appeal for Contract Breach:")
+                print(
+                    f"   {', '.join([k for k in self.court_urls_tr.keys() if k != 'STJ'])}"
+                )
+                print(
+                    "TRE - Évora | TRL - Lisboa | TRC - Coimbra | TRG - Guimarães | TRP - Porto"
+                )
+                court_code = input("\nChoose court: ").strip().upper()
 
             if court_code not in self.court_urls_tr or court_code == "STJ":
                 print("❌ Invalid court or use option 4 for STJ. Exiting.")
@@ -644,24 +710,7 @@ class LegalDocumentOrchestrator:
                 return
 
             total = len(links)
-            response = input(
-                f"\n📊 Found {total} links. How many to process? (number or 'all'): "
-            ).strip()
-
-            try:
-                if response.lower() == "all":
-                    num_to_scrape = total
-                else:
-                    num_to_scrape = int(response)
-                    if num_to_scrape > total:
-                        print(
-                            f"⚠️  Requested ({num_to_scrape}) > total. Processing all ({total})."
-                        )
-                        num_to_scrape = total
-            except (ValueError, TypeError):
-                print("⚠️  Invalid input. Processing first 5 by default.")
-                num_to_scrape = 5
-
+            num_to_scrape = self._resolve_num_to_scrape(total, preset_limit)
             links_to_scrape = links[:num_to_scrape]
 
             documents, failed = await self.scrape_documents(
@@ -672,7 +721,7 @@ class LegalDocumentOrchestrator:
             )
 
             print("\n" + "=" * 80)
-            print(f"✅ SCRAPING COMPLETE".center(80))
+            print("✅ SCRAPING COMPLETE".center(80))
             print("=" * 80)
             print(f"✅ Successes: {len(documents)}")
             print(f"❌ Failures: {len(failed)}")
@@ -700,24 +749,7 @@ class LegalDocumentOrchestrator:
                 return
 
             total = len(links)
-            response = input(
-                f"\n📊 Found {total} links. How many to process? (number or 'all'): "
-            ).strip()
-
-            try:
-                if response.lower() == "all":
-                    num_to_scrape = total
-                else:
-                    num_to_scrape = int(response)
-                    if num_to_scrape > total:
-                        print(
-                            f"⚠️  Requested ({num_to_scrape}) > total. Processing all ({total})."
-                        )
-                        num_to_scrape = total
-            except (ValueError, TypeError):
-                print("⚠️  Invalid input. Processing first 5 by default.")
-                num_to_scrape = 5
-
+            num_to_scrape = self._resolve_num_to_scrape(total, preset_limit)
             links_to_scrape = links[:num_to_scrape]
 
             documents, failed = await self.scrape_documents(
@@ -728,7 +760,7 @@ class LegalDocumentOrchestrator:
             )
 
             print("\n" + "=" * 80)
-            print(f"✅ SCRAPING COMPLETE".center(80))
+            print("✅ SCRAPING COMPLETE".center(80))
             print("=" * 80)
             print(f"✅ Successes: {len(documents)}")
             print(f"❌ Failures: {len(failed)}")
@@ -745,7 +777,7 @@ class LegalDocumentOrchestrator:
             url = self.court_url_csm
             tribunal_id = "csm"
 
-            print(f"\n🎯 Mode: CSM Database")
+            print("\n🎯 Mode: CSM Database")
             print(f"📝 Opening: {url}")
             print("💡 Topic: Contract Breach (CSM Jurisprudence Database)")
             print(
@@ -758,24 +790,7 @@ class LegalDocumentOrchestrator:
                 return
 
             total = len(links)
-            response = input(
-                f"\n📊 Found {total} links. How many to process? (number or 'all'): "
-            ).strip()
-
-            try:
-                if response.lower() == "all":
-                    num_to_scrape = total
-                else:
-                    num_to_scrape = int(response)
-                    if num_to_scrape > total:
-                        print(
-                            f"⚠️  Requested ({num_to_scrape}) > total. Processing all ({total})."
-                        )
-                        num_to_scrape = total
-            except (ValueError, TypeError):
-                print("⚠️  Invalid input. Processing first 5 by default.")
-                num_to_scrape = 5
-
+            num_to_scrape = self._resolve_num_to_scrape(total, preset_limit)
             links_to_scrape = links[:num_to_scrape]
 
             documents, failed = await self.scrape_documents(
@@ -783,7 +798,7 @@ class LegalDocumentOrchestrator:
             )
 
             print("\n" + "=" * 80)
-            print(f"✅ SCRAPING COMPLETE".center(80))
+            print("✅ SCRAPING COMPLETE".center(80))
             print("=" * 80)
             print(f"✅ Successes: {len(documents)}")
             print(f"❌ Failures: {len(failed)}")
@@ -800,7 +815,7 @@ class LegalDocumentOrchestrator:
             url = self.court_url_csm
             tribunal_id = "csm"
 
-            print(f"\n🎯 Mode: CSM Database")
+            print("\n🎯 Mode: CSM Database")
             print(f"📝 Opening: {url}")
             print("💡 Topic: Domestic Violence (CSM Jurisprudence Database)")
             print(
@@ -813,24 +828,7 @@ class LegalDocumentOrchestrator:
                 return
 
             total = len(links)
-            response = input(
-                f"\n📊 Found {total} links. How many to process? (number or 'all'): "
-            ).strip()
-
-            try:
-                if response.lower() == "all":
-                    num_to_scrape = total
-                else:
-                    num_to_scrape = int(response)
-                    if num_to_scrape > total:
-                        print(
-                            f"⚠️  Requested ({num_to_scrape}) > total. Processing all ({total})."
-                        )
-                        num_to_scrape = total
-            except (ValueError, TypeError):
-                print("⚠️  Invalid input. Processing first 5 by default.")
-                num_to_scrape = 5
-
+            num_to_scrape = self._resolve_num_to_scrape(total, preset_limit)
             links_to_scrape = links[:num_to_scrape]
 
             documents, failed = await self.scrape_documents(
@@ -838,7 +836,7 @@ class LegalDocumentOrchestrator:
             )
 
             print("\n" + "=" * 80)
-            print(f"✅ SCRAPING COMPLETE".center(80))
+            print("✅ SCRAPING COMPLETE".center(80))
             print("=" * 80)
             print(f"✅ Successes: {len(documents)}")
             print(f"❌ Failures: {len(failed)}")
@@ -855,10 +853,55 @@ class LegalDocumentOrchestrator:
             return
 
 
+def _parse_args() -> argparse.Namespace:
+    """Parse CLI flags for the scraper's non-interactive mode.
+
+    Returns:
+        Parsed arguments. `case_type`/`court`/`limit` default to None, meaning the original
+        fully-interactive text menu runs unchanged.
+    """
+    parser = argparse.ArgumentParser(
+        description="DGSI/CSM legal document scraper. With no flags, runs the original "
+        "interactive text menu. With --case-type and --court, skips the menu and the "
+        "'how many to process' prompt (the Selenium browser still opens and still needs a "
+        "human to search and click the right descriptor)."
+    )
+    parser.add_argument("--case-type", choices=["dv", "boc"], default=None)
+    parser.add_argument(
+        "--court",
+        choices=["TRE", "TRL", "TRC", "TRG", "TRP", "STJ", "JP", "CSM"],
+        default=None,
+        type=str.upper,
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cap on how many extracted links to scrape.",
+    )
+    return parser.parse_args()
+
+
 async def main():
-    """Entry point for the scraper."""
+    """Entry point for the scraper: parse CLI flags and run the orchestrator."""
+    args = _parse_args()
     orchestrator = LegalDocumentOrchestrator()
-    await orchestrator.run()
+
+    if args.case_type is not None and args.court is not None:
+        key = (args.case_type, args.court)
+        if key not in _CASE_TYPE_COURT_TO_CHOICE:
+            raise SystemExit(
+                f"Invalid --case-type/--court combination: {args.case_type}/{args.court}. "
+                f"Valid combinations: {sorted(_CASE_TYPE_COURT_TO_CHOICE)}"
+            )
+        preset_choice = _CASE_TYPE_COURT_TO_CHOICE[key]
+        await orchestrator.run(
+            preset_choice=preset_choice,
+            preset_court=args.court,
+            preset_limit=args.limit,
+        )
+    else:
+        await orchestrator.run()
 
 
 if __name__ == "__main__":

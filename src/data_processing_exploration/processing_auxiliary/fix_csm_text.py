@@ -1,11 +1,11 @@
-import re
 import json
+import re
 from pathlib import Path
 
 
 def limpar_texto_integral(csm_json):
-    """
-    Remove tudo até e incluindo 'Decisão Texto Integral' e retorna apenas o conteúdo que vem depois.
+    """Remove tudo até e incluindo 'Decisão Texto Integral' e retorna apenas o conteúdo que vem depois.
+
     Salva o texto limpo no próprio JSON, substituindo o campo 'texto_integral_completo'.
 
     Args:
@@ -33,8 +33,7 @@ def limpar_texto_integral(csm_json):
 
 
 def extrair_data_acordao(texto):
-    """
-    Extrai a data do acórdão do texto fornecido.
+    """Extrai a data do acórdão do texto fornecido.
 
     Args:
         texto (str): texto do acórdão
@@ -51,18 +50,18 @@ def extrair_data_acordao(texto):
 
 
 def limpar_texto_integral_sem_decisao(csm_json):
-    """
-    Remove tudo até e incluindo 'Decisão Texto Integral' e retorna apenas o conteúdo que vem depois.
+    """Remove tudo até e incluindo 'Decisão Texto Integral' e retorna apenas o conteúdo que vem depois.
+
     Salva o texto limpo no próprio JSON, substituindo o campo 'texto_integral_sem_decisao'.
+    Também extrai a data do acórdão do texto e, se encontrada, atualiza o
+    campo 'data_acordao' do JSON.
 
     Args:
         csm_json (dict): objeto JSON do csm contendo 'texto_integral_sem_decisao'
 
     Returns:
         dict: O mesmo JSON, com 'texto_integral_sem_decisao' corrigido
-
     """
-
     texto = csm_json.get("texto_integral_sem_decisao")
 
     data_acordao = extrair_data_acordao(texto)
@@ -87,8 +86,7 @@ def limpar_texto_integral_sem_decisao(csm_json):
 
 
 def salvar_json(csm_json, arquivo_path):
-    """
-    Salva o JSON corrigido no arquivo.
+    """Salva o JSON corrigido no arquivo.
 
     Args:
         csm_json (dict): objeto JSON corrigido
@@ -99,7 +97,7 @@ def salvar_json(csm_json, arquivo_path):
 
 
 def main():
-
+    """Carrega o JSON de casos CSM, limpa 'texto_integral_sem_decisao' de cada item e grava o resultado."""
     json_file_path = Path("./../../data/csm_violencia_domestica_20251029_131345.json")
 
     with open(json_file_path, "r", encoding="utf-8") as f:
