@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "master-thesis-msc-data-science"
+version = "1.0.0"
+description = "Code for MS thesis: Decision prediction in Portuguese courts"
+authors = [{name = "Author", email = "heltonbcv41@gmail.com"}]
+requires-python = ">=3.12"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | env
+  | venv
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "D"]
+ignore = [
+    "E501",      # line too long (handled by black)
+    "D100",      # Missing module docstring (not required for all modules)
+    "D104",      # Missing docstring in public package
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # allow unused imports in __init__.py
+"tests/*" = ["D"]         # don't require docstrings in tests
+
+# The modelling entry points below use two deliberate patterns that E402/I001/F401/F821
+# cannot express, so they are exempted from those four rules only — the D (docstring) rules,
+# which are the gate that matters for someone inheriting this code, still apply everywhere.
+#
+#   1. sys.path bootstrap. These scripts are run directly (`python src/modeling/dl/train.py`),
+#      not as package modules, so they insert a sibling directory into sys.path *before*
+#      importing from it. Letting the import sorter hoist those imports above the
+#      sys.path.insert() call would break them at runtime.
+#   2. Lazy imports of heavy dependencies (torch/transformers/matplotlib/pandas) inside the
+#      functions that need them, keeping `--help` and argument validation fast. The
+#      corresponding type annotations are quoted forward references ("pd.Series",
+#      "Pipeline", "Path | None"), which ruff reports as F821 undefined names even though
+#      they are never evaluated at runtime.
+"src/modeling/dl/train.py" = ["E402", "I001", "F401", "F821"]
+"src/modeling/dl/predict.py" = ["E402", "I001"]
+"src/modeling/dl/extract_bert_embeddings.py" = ["E402", "I001"]
+"src/modeling/dl/legal_bertimbau_tokenization_embedding.py" = ["E402", "I001", "F401"]
+"src/modeling/llms/predict.py" = ["E402", "I001"]
+"src/modeling/llms/test_single_case.py" = ["I001"]
+"src/modeling/llms/debug_ollama_delivery.py" = ["F401"]
+"src/evaluation/classification.py" = ["F821"]
+"src/evaluation/*.ipynb" = ["E402", "I001"]
+"src/eda/eda.py" = ["F401"]
+
+[tool.pytest.ini_options]
+# Scoped to the pytest suite only (unit/, smoke/, test_reproduction.py), not all of tests/:
+# tests/ also holds pre-existing, non-pytest scraper-debugging scripts (test3.py, test_v3pp.py,
+# ...) left over from earlier development, which are not part of this suite and would break
+# collection if included (e.g. test_v3pp.py imports a function test11.py no longer defines).
+testpaths = ["tests/unit", "tests/smoke", "tests/test_reproduction.py"]
+markers = [
+    "slow: processes the full raw corpus rather than a fixture slice (deselect with '-m \"not slow\"')",
+]

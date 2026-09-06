@@ -1,0 +1,155 @@
+📊 Análise do Problema
+
+1. Contexto do Projeto
+   - Objetivo: Binary Classification de acórdãos de violência doméstica (tribunais de relação) e incumprimentos de contratos (julgados de paz)
+   - Métodos: NLP+ML clássico (baseline) vs Deep Learning
+   - Necessidade crítica: Prevenir data leakage escondendo a decisão durante treino e avaliação, para depois ter as classes bem definidas numa palavra/número.
+
+2. Estrutura dos Dados Extraídos
+
+   A) TRIBUNAIS DE RELAÇÃO (Violência Doméstica):
+      - url, tribunal, tipo_direito, tipo_caso
+      - n_processo, juiz_relator, data_acordao
+      - descritores (array limpo)
+      - votacao, meio_processual
+      - decisao (cabeçalho: ex. "CONFIRMADA", "NEGADO PROVIMENTO")
+      - sumario (limpo, sem cabeçalhos)
+      - texto_integral_disponivel (boolean)
+      - texto_integral_completo
+      
+      NOVOS CAMPOS (prevenção data leakage):
+      - decisao_extraida_do_texto_integral: Decisão final extraída (DISPOSITIVO > DECISÃO)
+      - texto_integral_sem_decisao: Texto completo SEM a decisão (para treino)
+      - metadata_decisao: {
+          metodo_extracao: "dispositivo|decisao|pelo_exposto|acordam|none"
+          confianca: "alta|media|baixa"
+          palavra_chave_encontrada: string
+          requer_verificacao_manual: boolean
+          motivo_verificacao: string ou null
+        }
+   
+   B) JULGADOS DE PAZ (Incumprimento de Contratos):
+      - url, relator, descritores (array limpo)
+      - data_sentenca, julgado_paz_de (ex: "SETÚBAL")
+      - decisao_texto_integral
+
+3. Estratégia de Extração da Decisão (Cascata)
+
+   ## VERSÃO 3+ (ATUAL) - Foco nos Últimos 30% + Numeração Isolada
+   
+   **MUDANÇA CRÍTICA**: 
+   - Decisões estão SEMPRE no final do acórdão (após I-Relatório e II-Fundamentação)
+   - Busca APENAS nos últimos 30% do documento: `texto_final = texto_integral_completo[int(len*0.70):]`
+   - Elimina falsos positivos de "Acordam os Juízes" e "Decisão Texto Integral:" dos cabeçalhos
+   - Posições calculadas com offset: `posicao_absoluta = match.start() + inicio_busca`
+   - Validação de tamanho: 50-50000 caracteres
+   
+   **PADRÕES RECONHECIDOS**:
+   1. DISPOSITIVO com numeração: (IV|V|VI) + "DISPOSITIVO|Dispositivo"
+   2. DISPOSITIVO CAPS: "DISPOSITIVO|DECISÃO" sem numeração
+   3. DECISÃO com numeração: (III|IV|V|VI) + "DECISÃO|Decisão"
+   4. DECISÃO CAPS: "DECISÃO|DISPOSITIVO|FUNDAMENTAÇÃO DA DECISÃO" sem numeração
+   5. **NUMERAÇÃO ROMANA ISOLADA**: III, IV, V, VI SEM nomes de secções
+   6. **NUMERAÇÃO DECIMAL**: 3., 4., 5., etc. (para estrutura 1.Relatório, 2.Fundamentação, 3.Decisão)
+   7. "Pelo exposto", "Termos em que se decide"
+   8. "Acordam"
+   
+   **VERBOS DECISORIOS expandidos**: negar, manter, confirmar, revogar, procede, improcede
+
+   CAMADA 1A - DISPOSITIVO com numeração (confiança ALTA):
+   - Procura por "DISPOSITIVO" ou "Dispositivo" com numeração romana (IV, V, VI)
+   - Usa PRIMEIRA ocorrência no texto_final (mais próxima do fim)
+   - Valida presença de verbos decisórios nos primeiros 1000 chars
+   - Extrai desde "DISPOSITIVO" até ao fim
+   - metodo_extracao: "dispositivo_numerado"
+   
+   CAMADA 1B - DISPOSITIVO CAPS (confiança ALTA):
+   - Procura "DISPOSITIVO|DECISÃO" em CAPS LOCK sem numeração
+   - Para juízes que não numeram secções, apenas escrevem "DISPOSITIVO"
+   - Valida verbos decisórios
+   - metodo_extracao: "dispositivo_caps"
+   
+   CAMADA 2A - DECISÃO com numeração (confiança MÉDIA):
+   - Procura seções III/IV/V/VI + "DECISÃO" no texto_final
+   - Usa PRIMEIRA ocorrência encontrada
+   - Verifica se há DISPOSITIVO depois (se sim, usa DISPOSITIVO)
+   - Valida verbos decisórios para determinar confiança
+   - metodo_extracao: "decisao_numerada"
+   
+   CAMADA 2B - DECISÃO CAPS (confiança MÉDIA):
+   - Procura "DECISÃO|DISPOSITIVO|FUNDAMENTAÇÃO DA DECISÃO" em CAPS
+   - Verifica se há DISPOSITIVO CAPS depois
+   - Cross-referencing entre padrões numerados e CAPS
+   - metodo_extracao: "decisao_caps"
+   
+   **CAMADA 3A - NUMERAÇÃO ROMANA ISOLADA (confiança MÉDIA-ALTA)**:
+   - **NOVA**: Para casos onde juiz usa APENAS números romanos sem nomes
+   - Exemplo: "III" isolado, seguido de texto da decisão
+   - Procura a **ÚLTIMA ocorrência** de III|IV|V|VI no texto_final
+   - Valida com "Termos em que se decide", PELO_EXPOSTO ou VERBOS_DECISORIOS
+   - Usa últimas ocorrências por ter maior probabilidade de ser a decisão
+   - metodo_extracao: "numeracao_romana_isolada"
+   
+   **CAMADA 3B - NUMERAÇÃO DECIMAL (confiança MÉDIA)**:
+   - **NOVA**: Para estruturas tipo "1. Relatório, 2. Fundamentação, 3. Decisão"
+   - Procura a **ÚLTIMA ocorrência** de número >= 3 seguido de ponto no texto_final
+   - Exemplo: "3.", "4.", "5."
+   - Valida com "Termos em que se decide", PELO_EXPOSTO ou VERBOS_DECISORIOS
+   - metodo_extracao: "numeracao_decimal"
+   
+   CAMADA 4 - "Pelo exposto" / "Termos em que se decide" (confiança MÉDIA):
+   - Procura "Pelo exposto", "Face ao exposto", "Nestes termos", **"Termos em que se decide"** no texto_final
+   - Valida verbos decisórios nos próximos 300 caracteres
+   - Usa PRIMEIRA ocorrência encontrada
+   - metodo_extracao: "pelo_exposto"
+   
+   CAMADA 5 - "Acordam" (confiança MÉDIA-BAIXA → FLAG):
+   - Busca "Acordam|Acordaram" no texto_final
+   - Valida verbos decisórios nos próximos 400 caracteres
+   - Marca como requer_verificacao_manual=True
+   - Motivo: "Extração baseada em 'Acordam' no final do documento"
+   - metodo_extracao: "acordam_final"
+   
+   CAMADA 6 - EDGE CASE (confiança BAIXA → FLAG):
+   - Nenhum padrão encontrado nos últimos 30%
+   - Retorna None para decisao_extraida
+   - texto_integral_sem_decisao = texto completo
+   - requer_verificacao_manual=True
+   - motivo: "Nenhum padrão de decisão encontrado nos últimos 30% do documento - estrutura atípica"
+   - metodo_extracao: "none"
+
+4. Verbos Decisórios Reconhecidos (v3)
+   - julga-se, condena-se, absolve-se
+   - confirma-se, anula-se, revoga-se
+   - indefere-se, mantém-se, decide-se, determina-se
+   - nega-se, negar, negado provimento, nega-se provimento
+   - dá-se, concede-se
+   - manter, confirmar, revogar (novas adições v3)
+   - procede, improcede, procedente, improcedente (novas adições v3)
+
+5. Limpeza de Descritores
+   
+   PADRÕES EXCLUÍDOS:
+   - Campos de metadados: "Data do acordão", "Data da sentença", "Relator:", "Processo:"
+   - "Nº do Documento", "Número do Documento"
+   - "Julgado de Paz"
+   - Números isolados ou datas (regex: ^\d+$ ou ^\d{2}-\d{2}-\d{4}$)
+   
+   VALIDAÇÃO:
+   - Mínimo 3 caracteres
+   - Não corresponder a padrões de exclusão
+
+6. Melhorias no Sumário
+   - Filtrar linhas com apenas pontos/reticências (………)
+   - Remover "Acordam no Tribunal..." se for primeira linha
+   - Validação mínima: 50 caracteres
+
+7. Outputs JSON
+   - Tribunais Relação: dgsi_tr_violencia_domestica_{tribunal}.json
+   - Julgados de Paz: dgsi_jp_incumprimento_contratosv2.json
+
+8. Casos para Verificação Manual
+   - confianca == "baixa"
+   - requer_verificacao_manual == True
+   - decisao_extraida == None
+   - Filtrar por metadata_decisao.motivo_verificacao para diagnóstico

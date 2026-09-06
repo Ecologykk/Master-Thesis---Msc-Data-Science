@@ -1,0 +1,188 @@
+:root {
+  --fundo: #ffffff;
+  --texto: #0f223a;
+  --texto-sobre-escuro: #ffffff;
+  --azul: #1f3a5f;
+  --azul-secundario: #2b4a73;
+  --cinzento: #1f2a37;
+  --linha: #c8ced6;
+}
+
+html,
+body,
+[class*="css"] {
+  font-family: "Georgia", "Times New Roman", serif;
+  color: var(--texto);
+}
+
+.stApp {
+  background: var(--fundo);
+}
+
+div.block-container {
+  max-width: 78%;
+  padding-top: 1.25rem;
+  padding-bottom: 2.5rem;
+}
+
+.page-title {
+  color: var(--azul);
+  font-size: 2rem;
+  margin-bottom: 0.2rem;
+}
+
+.page-subtitle {
+  color: var(--texto);
+  font-size: 1.05rem;
+  margin-bottom: 1.1rem;
+}
+
+.top-header {
+  border-bottom: 1px solid var(--linha);
+  padding-bottom: 0.6rem;
+  margin-bottom: 1rem;
+  color: var(--texto);
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.case-meta {
+  border-top: 1px solid var(--linha);
+  border-bottom: 1px solid var(--linha);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.stButton > button {
+  min-height: 3rem;
+  border-radius: 0.2rem;
+  border: 1px solid var(--azul);
+  font-size: 1.02rem;
+  background-color: var(--azul-secundario);
+  color: var(--texto-sobre-escuro) !important;
+}
+
+.stForm button {
+  min-height: 3rem;
+  border-radius: 0.2rem;
+  border: 1px solid var(--azul);
+  font-size: 1.02rem;
+  background-color: var(--azul-secundario);
+  color: var(--texto-sobre-escuro) !important;
+}
+
+.stButton > button[kind="primary"] {
+  background-color: var(--azul);
+  color: var(--texto-sobre-escuro) !important;
+}
+
+.stButton > button[kind="secondary"] {
+  background-color: var(--azul-secundario);
+  color: var(--texto-sobre-escuro) !important;
+}
+
+button[kind="primary"],
+button[kind="secondary"] {
+  color: var(--texto-sobre-escuro) !important;
+}
+
+.stButton > button *,
+.stForm [data-testid="stBaseButton-secondary"] *,
+.stForm [data-testid="stBaseButton-primary"] *,
+button[kind="primary"] *,
+button[kind="secondary"] * {
+  color: var(--texto-sobre-escuro) !important;
+}
+
+.stButton > button:disabled {
+  background-color: #77879b;
+  color: #e9eef5 !important;
+  border-color: #6f7f93;
+}
+
+.st-key-btn_login_submit button,
+.st-key-btn_login_submit button:hover,
+.st-key-btn_login_submit button:focus,
+.st-key-btn_login_submit button:active {
+  background-color: var(--azul-secundario) !important;
+  border-color: var(--azul) !important;
+  color: #ffffff !important;
+}
+
+.st-key-btn_login_submit button *,
+.st-key-btn_login_submit button:hover *,
+.st-key-btn_login_submit button:focus *,
+.st-key-btn_login_submit button:active * {
+  color: #ffffff !important;
+}
+
+.st-key-btn_logout_instructions button,
+.st-key-btn_logout_instructions button:hover,
+.st-key-btn_logout_instructions button:focus,
+.st-key-btn_logout_instructions button:active,
+.st-key-btn_logout_annotation button,
+.st-key-btn_logout_annotation button:hover,
+.st-key-btn_logout_annotation button:focus,
+.st-key-btn_logout_annotation button:active,
+.st-key-btn_logout_final button,
+.st-key-btn_logout_final button:hover,
+.st-key-btn_logout_final button:focus,
+.st-key-btn_logout_final button:active {
+  background-color: #a12a2a !important;
+  border-color: #7e1f1f !important;
+  color: #ffffff !important;
+}
+
+.st-key-btn_logout_instructions button *,
+.st-key-btn_logout_instructions button:hover *,
+.st-key-btn_logout_annotation button *,
+.st-key-btn_logout_annotation button:hover *,
+.st-key-btn_logout_final button *,
+.st-key-btn_logout_final button:hover * {
+  color: #ffffff !important;
+}
+
+.stMarkdown,
+label,
+p,
+.stCaption {
+  color: var(--texto);
+}
+
+.case-status-strip {
+  margin-top: 0.35rem;
+  margin-bottom: 0.2rem;
+  padding: 0.45rem 0.4rem;
+  border: 1px solid var(--linha);
+  border-radius: 0.2rem;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.case-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  border-radius: 2px;
+  border: 1px solid #8aa0b9;
+  background: #dce5ef;
+}
+
+.case-dot.done {
+  background: #4dbd2b;
+  border-color: #406a56;
+}
+
+.case-dot.pending {
+  background: #d6a851;
+  border-color: #b58d45;
+}
+
+.case-dot.current {
+  background: #1f3a5f;
+  border-color: #102744;
+  box-shadow: 0 0 0 2px #b7c7da;
+}
