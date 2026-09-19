@@ -126,7 +126,7 @@ python src/modeling/dl/extract_bert_embeddings.py --run_name bert_v1 --case_type
 
 ## Expected result
 `predict.py` prints a formatted report (from `run_classification_evaluation`) with Macro-F1, MCC,
-and (DV only) TSS point estimates plus 95% bootstrap CIs (TSS is computed but not reported in the thesis), per-class precision/recall/F1, and saves
+and their 95% bootstrap CIs, per-class precision/recall/F1, and saves
 a forest plot. **Headline finding reported in the thesis**: the fine-tuned LegalBERTimbau baseline
 (bert mode) collapsed to predicting the majority class — i.e. it did not learn a useful decision
 boundary, unlike the DeepSeek zero-shot LLM baseline (MCC 0.592 on DV, 0.468 on BoC — see

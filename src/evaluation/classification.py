@@ -7,11 +7,6 @@ Primary metrics:
 - **Macro F1**
 - **Matthews Correlation Coefficient (MCC)**
 
-Secondary metric:
-
-- **True Skill Statistic (TSS)**
-  (only for Domestic Violence)
-
 Also compute:
 
 - Per-class precision
@@ -50,7 +45,6 @@ Use the same evaluation protocol:
 - Stratified bootstrap
 - Macro-F1
 - MCC
-- TSS (DV only)
 
 Report:
 
@@ -106,15 +100,7 @@ CLASS_DISPLAY_NAMES: dict[str, dict[int, str]] = {
 }
 
 
-def _tss(y_true, y_pred):
-    cm = confusion_matrix(y_true, y_pred, labels=BINARY_LABELS)
-    tn, fp, fn, tp = cm.ravel()
-    sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0
-    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
-    return sensitivity + specificity - 1
-
-
-def _evaluate_classification(y_true, y_pred, labels, compute_tss=False):
+def _evaluate_classification(y_true, y_pred, labels):
     """Compute classification metrics with a fixed class order.
 
     Parameters
@@ -124,8 +110,6 @@ def _evaluate_classification(y_true, y_pred, labels, compute_tss=False):
     labels : list of int
         Ordered class integers that define the metric array positions.
         Use BINARY_LABELS for DV tasks or TERNARY_LABELS for BoC tasks.
-    compute_tss : bool
-        Whether to compute TSS (binary DV task only).
     """
     # Passing `labels` guarantees per-class arrays are always aligned to the
     # same positions, even when a class is absent from a bootstrap sample.
@@ -146,9 +130,6 @@ def _evaluate_classification(y_true, y_pred, labels, compute_tss=False):
         "confusion_matrix": cm,
     }
 
-    if compute_tss:
-        results["tss"] = _tss(y_true, y_pred)
-
     return results
 
 
@@ -165,9 +146,7 @@ def _stratified_bootstrap_indices(y_true, labels, rng):
     return np.concatenate(indices)
 
 
-def bootstrap_evaluation(
-    y_true, y_pred, labels, compute_tss=False, n_bootstraps=1000, random_state=SEED
-):
+def bootstrap_evaluation(y_true, y_pred, labels, n_bootstraps=1000, random_state=SEED):
     """Perform stratified bootstrap evaluation of classification metrics.
 
     Parameters
@@ -177,8 +156,6 @@ def bootstrap_evaluation(
     labels : list of int
         Ordered class integers that define the metric array positions.
         Use BINARY_LABELS for DV tasks or TERNARY_LABELS for BoC tasks.
-    compute_tss : bool
-        Whether to compute TSS (binary DV task only).
     n_bootstraps : int
         Number of bootstrap samples to generate.
     random_state : int or None
@@ -191,9 +168,7 @@ def bootstrap_evaluation(
 
     for _ in range(n_bootstraps):
         idx = _stratified_bootstrap_indices(y_true, labels, rng)
-        metrics = _evaluate_classification(
-            y_true[idx], y_pred[idx], labels=labels, compute_tss=compute_tss
-        )
+        metrics = _evaluate_classification(y_true[idx], y_pred[idx], labels=labels)
         metrics_list.append(metrics)
 
     return metrics_list
@@ -218,7 +193,7 @@ def compute_confidence_intervals(metrics_list, alpha=0.05):
     lower_p = 100 * (alpha / 2)
     upper_p = 100 * (1 - alpha / 2)
 
-    scalar_keys = ["macro_f1", "mcc", "tss"]
+    scalar_keys = ["macro_f1", "mcc"]
     array_keys = ["precision", "recall", "f1"]
 
     ci = {}
@@ -259,7 +234,7 @@ def run_classification_evaluation(
     ----------
     y_true, y_pred : array-like of int
     case_type : str — "dv" or "boc"
-        Determines the label set, class names, and whether TSS is computed.
+        Determines the label set and class names.
     n_bootstraps : int
         Number of bootstrap iterations for CI estimation.
     split_label : str
@@ -277,16 +252,12 @@ def run_classification_evaluation(
     y_pred = np.array(y_pred)
     labels = LABELS[case_type]
     names = LABEL_NAMES[case_type]
-    compute_tss = case_type == "dv"
 
-    point = _evaluate_classification(
-        y_true, y_pred, labels=labels, compute_tss=compute_tss
-    )
+    point = _evaluate_classification(y_true, y_pred, labels=labels)
     metrics_list = bootstrap_evaluation(
         y_true,
         y_pred,
         labels=labels,
-        compute_tss=compute_tss,
         n_bootstraps=n_bootstraps,
     )
     ci = compute_confidence_intervals(metrics_list)
@@ -299,8 +270,6 @@ def run_classification_evaluation(
     print(f"\n  {split_label} n  : {len(y_true)}")
     print(f"  Macro F1     : {point['macro_f1']:.4f}{_ci_str('macro_f1')}")
     print(f"  MCC          : {point['mcc']:.4f}{_ci_str('mcc')}")
-    if compute_tss:
-        print(f"  TSS          : {point['tss']:.4f}{_ci_str('tss')}")
 
     print("\n  Per-class metrics (95% bootstrap CI):")
     print(f"  {'Class':<16} {'Precision':>24} {'Recall':>24} {'F1':>24}")
@@ -329,7 +298,7 @@ def plot_forest(
     """Forest plot of classification metrics with 95% bootstrap CIs.
 
     Two sections:
-      - Summary metrics: Macro F1, MCC, TSS (DV only)  — case colour, ◆ marker
+      - Summary metrics: Macro F1, MCC                  — case colour, ◆ marker
       - Per-class metrics: F1, Precision, Recall        — class colours, ● marker
 
     Parameters
@@ -365,7 +334,7 @@ def plot_forest(
 
     # --- summary rows ---
     summary_rows = []
-    for key in ["macro_f1", "mcc"] + (["tss"] if case_type == "dv" else []):
+    for key in ["macro_f1", "mcc"]:
         if key not in ci:
             continue
         summary_rows.append(

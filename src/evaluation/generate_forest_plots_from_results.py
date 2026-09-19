@@ -50,13 +50,6 @@ for idx, row in results_df.iterrows():
         "labels": labels,
     }
 
-    if case_type == "dv":
-        results["point_estimates"]["tss"] = row["tss_point"]
-        results["ci"]["tss"] = {
-            "ci_lower": row["tss_ci_lower"],
-            "ci_upper": row["tss_ci_upper"],
-        }
-
     class_names_dict = LABEL_NAMES[case_type]
 
     for metric in ["f1", "precision", "recall"]:
