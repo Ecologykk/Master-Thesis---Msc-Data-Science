@@ -96,7 +96,7 @@ Few-shot stages add the retrieval-embedding cost (once, amortised) plus longer p
 
 ## Expected result
 `predict.py` prints the same bootstrap-CI classification report as the BERT pipeline (Macro-F1,
-MCC, TSS for DV) and saves a forest plot. **Headline result reported in the thesis**: DeepSeek-R1
+MCC; the code also computes TSS for DV, which the thesis does not report) and saves a forest plot. **Headline result reported in the thesis**: DeepSeek-R1
 8B zero-shot achieved **MCC 0.592 on DV** and **MCC 0.468 on BoC** — clearly better than the
 fine-tuned LegalBERTimbau baseline, which collapsed to predicting the majority class (see
 [04-bert.md](04-bert.md) and [06-evaluation.md](06-evaluation.md) for the consolidated

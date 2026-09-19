@@ -2,7 +2,7 @@
 
 ## Purpose
 Compute the metrics used to compare models: Macro-F1, Matthews Correlation Coefficient (MCC),
-True Skill Statistic (TSS, DV only), and per-class precision/recall/F1, each with 95% stratified
+True Skill Statistic (TSS, DV only; computed by the code but not reported in the thesis), and per-class precision/recall/F1, each with 95% stratified
 bootstrap confidence intervals, plus forest plots visualising them. This is a shared library
 ([`classification.py`](../src/evaluation/classification.py)) consumed by both the BERT pipeline
 ([04-bert.md](04-bert.md)) and the LLM pipeline ([05-llm.md](05-llm.md)) — every `predict.py` run
