@@ -1,7 +1,7 @@
 """Compute bootstrap confidence intervals for all model predictions.
 
 Loads all prediction parquets (BERT v3 + LLM runs), computes CIs for:
-  - MCC, Macro-F1, TSS (DV only)
+  - MCC, Macro-F1
   - Per-class precision, recall, F1
 
 Outputs a consolidated parquet with all results + CIs.
@@ -48,7 +48,7 @@ def extract_metrics_from_ci_dict(ci_dict, labels, model_name, case_type, run_nam
     }
 
     # Scalar metrics
-    for metric in ["macro_f1", "mcc", "tss"]:
+    for metric in ["macro_f1", "mcc"]:
         if metric in ci_dict:
             row[f"{metric}_ci_lower"] = ci_dict[metric]["ci_lower"]
             row[f"{metric}_ci_upper"] = ci_dict[metric]["ci_upper"]
@@ -73,15 +73,12 @@ def process_prediction_file(file_path, case_type, model_name, run_name):
     y_pred = df["y_pred"].values
 
     labels = BINARY_LABELS if case_type == "dv" else TERNARY_LABELS
-    compute_tss = case_type == "dv"
 
     print(f"    y_true shape: {y_true.shape}, y_pred shape: {y_pred.shape}")
     print(f"    Computing {1000} bootstrap samples (this may take a moment)...")
 
     # Run bootstrap evaluation
-    metrics_list = bootstrap_evaluation(
-        y_true, y_pred, labels=labels, compute_tss=compute_tss, n_bootstraps=1000
-    )
+    metrics_list = bootstrap_evaluation(y_true, y_pred, labels=labels, n_bootstraps=1000)
 
     # Compute CIs from bootstrap distribution
     ci_dict = compute_confidence_intervals(metrics_list, alpha=0.05)
@@ -89,15 +86,13 @@ def process_prediction_file(file_path, case_type, model_name, run_name):
     # Extract point estimates (from original prediction set)
     from classification import _evaluate_classification
 
-    point_estimates = _evaluate_classification(
-        y_true, y_pred, labels=labels, compute_tss=compute_tss
-    )
+    point_estimates = _evaluate_classification(y_true, y_pred, labels=labels)
 
     # Build output row
     row = extract_metrics_from_ci_dict(ci_dict, labels, model_name, case_type, run_name)
 
     # Add point estimates
-    for metric in ["macro_f1", "mcc", "tss"]:
+    for metric in ["macro_f1", "mcc"]:
         if metric in point_estimates:
             row[f"{metric}_point"] = point_estimates[metric]
 
