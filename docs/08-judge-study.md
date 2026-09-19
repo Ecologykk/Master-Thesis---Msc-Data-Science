@@ -58,10 +58,13 @@ Judge responses are written **only to Google Sheets**, never to local files — 
 - `estado` — per-judge state: `username`, `ramo` (assigned branch), `finalizado`,
   `finalizado_em`, `ultima_gravacao_em`.
 
-Per the app's own README, the collected judge responses and any analysis of them are explicitly
-excluded from the public repository:
-- `reports/*.csv` (judge decisions/confidence/justifications) — excluded.
-- `reports/*.ipynb` (analysis notebooks over those responses) — excluded.
+The raw judge responses stay local; an **anonymised copy is published** in
+`judge_labeling_app/reports/anonymised/{dv,boc}/` (`judge_annotation_{decisao,confianca,justificacao}.csv`).
+Judges are relabelled `J1-DV`…`J5-DV` and `J1-BoC`…`J5-BoC` (same order as the thesis tables), and one
+passage in which a judge identified themself by citing their own rulings was replaced with a
+`[passage removed…]` marker. Free-text justifications are otherwise verbatim (Portuguese).
+- `reports/dv/*.csv`, `reports/boc/*.csv` (raw responses, real judge codes) — excluded.
+- `reports/*.ipynb` (analysis notebooks over the raw responses) — excluded.
 - `.streamlit/secrets.toml` and `credentials/juizes.json` (real credentials) — excluded; only the
   `.example` templates are versioned.
 - The application source code itself, and the credential/secrets *templates*, are included.

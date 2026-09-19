@@ -6,7 +6,10 @@ credentials/*.json
 !credentials/judge_credentials.example.json
 env/*
 
-# Judge responses and identities are study-participant data about identifiable legal
-# professionals and must never be committed. See README.md for what was collected.
+# Raw judge responses carry the real judge codes and unredacted free text: keep local only.
+# Only the anonymised copies under reports/anonymised/ (judges relabelled J1..J5 per domain,
+# one self-identifying passage redacted) are published. See README.md.
 reports/**/*.csv
 reports/**/*.ipynb
+!reports/anonymised/
+!reports/anonymised/**/*.csv

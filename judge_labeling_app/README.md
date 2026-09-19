@@ -56,12 +56,17 @@ dos modelos. Isto envolve dados de participantes de estudo identificáveis (juí
 distinto do texto dos casos em si (pseudonimizado na origem pelas bases de dados públicas).
 
 **Excluído do repositório público** (dados de participantes do estudo):
-- As respostas dos juízes (decisão, confiança, justificação) — ficheiros em `reports/*.csv`.
+- As respostas originais dos juízes, com os códigos reais e o texto integral — ficheiros em
+  `reports/dv/*.csv` e `reports/boc/*.csv` (mantidos apenas localmente).
 - Quaisquer notebooks de análise dessas respostas — `reports/*.ipynb`.
 - Credenciais reais de login e da service account Google — `.streamlit/secrets.toml`,
   `credentials/*.json` (exceto os templates `.example`).
 
-**Incluído** (código-fonte e templates apenas):
+**Incluído**:
+- As respostas **anonimizadas** dos juízes em `reports/anonymised/{dv,boc}/*.csv` (decisão,
+  confiança, justificação): os juízes foram renomeados J1–J5 por domínio (ex.: `J3-DV`,
+  `J2-BoC`, na mesma ordem das tabelas da tese) e foi removida uma passagem que identificava
+  o autor. O restante texto está tal como foi escrito (em português).
 - O código-fonte completo da aplicação.
 - Templates com placeholders para as credenciais (`credentials/judge_credentials.example.json`,
   `.streamlit/secrets.example.toml`) — copiar e preencher com valores reais para reproduzir.
