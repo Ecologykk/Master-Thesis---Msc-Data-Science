@@ -1545,21 +1545,21 @@
     steps: [{ cue: 'Zero-shot to few-shot: mostly worse' }],
     notes: [
       "I hypothesised that examples would help. They mostly did not.",
-      "DV: MCC 0.592 to 0.486, Macro-F1 0.783 to 0.696, ALTERED recall 0.619 to 0.429.",
-      "BoC: MCC rose slightly, 0.468 to 0.523, but Macro-F1 fell, 0.663 to 0.631, and FAVORABLE recall dropped, 0.833 to 0.333.",
+      "DV: MCC 0.592 to 0.486, Macro-F1 0.783 to 0.696.",
+      "BoC: MCC rose slightly, 0.468 to 0.523, but Macro-F1 fell, 0.663 to 0.631.",
       "Consistent with one example per class being a thin, high-variance anchor, and with good examples being hard to pick (how many, and which). NOT tested.",
       "Limited to k = 1 per class because of the hardware (manuscript 6.1.3)."
     ],
     sources: [],
     footnote: 'Dissertation · §6.1.3 (few-shot paradox) · §5.2.2 (few-shot, k = 1) · Table 5.11',
     html: function () {
-      var rows = [['MCC', '0.592', '0.486', false, '0.468', '0.523', true], ['Macro-F1', '0.783', '0.696', false, '0.663', '0.631', false], ['Rare-class recall', '0.619', '0.429', false, '0.833', '0.333', false]];
+      var rows = [['MCC', '0.592', '0.486', false, '0.468', '0.523', true], ['Macro-F1', '0.783', '0.696', false, '0.663', '0.631', false]];
       function col(x, name, colr, a, b, c) {
         var h = box({ x: x, y: 10, w: 820, h: 70, style: 'background:' + colr + ';color:#fff;border-radius:35px;font-size:36px;font-weight:700;display:flex;align-items:center;justify-content:center' }, name);
         h += box({ x: x, y: 96, w: 820, h: 40, style: 'font-size:25px;font-weight:600;color:#5b5651;display:flex;justify-content:space-around' }, '<span>zero-shot</span><span></span><span>few-shot</span>');
         rows.forEach(function (r, i) {
-          var zs = r[a], fs = r[b], up = r[c], y = 140 + i * 130;
-          h += box({ x: x, y: y, w: 820, h: 110, cls: 'tile', style: 'display:flex;align-items:center;justify-content:space-between;padding:0 34px' },
+          var zs = r[a], fs = r[b], up = r[c], y = 150 + i * 170;
+          h += box({ x: x, y: y, w: 820, h: 140, cls: 'tile', style: 'display:flex;align-items:center;justify-content:space-between;padding:0 34px' },
             '<span style="font-size:30px;font-weight:700;color:' + SLATE + ';width:230px;line-height:1.1">' + r[0] + '</span>' +
             '<span style="font-size:42px;font-weight:700;color:' + INK + '">' + zs + '</span>' +
             '<span style="font-size:46px;font-weight:700;color:' + (up ? '#2f8a4c' : '#a8322a') + '">' + (up ? '▲' : '▼') + '</span>' +
@@ -1569,7 +1569,7 @@
       }
       /* indices: DV zero = 1, few = 2, up = 3 ; BoC zero = 4, few = 5, up = 6 */
       return col(80, 'Domestic violence (DV)', DVC, 1, 2, 3) + col(1020, 'Breach of contract (BoC)', BOCC, 4, 5, 6) +
-        chip(240, 560, 1440, 100, '#f6e0d6', MAROON, 'Few-shot did not help the way I hypothesised', 38);
+        chip(240, 510, 1440, 110, '#f6e0d6', MAROON, 'Few-shot did not help the way I hypothesised', 40);
     }
   });
 

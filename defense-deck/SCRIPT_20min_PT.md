@@ -104,7 +104,7 @@ Não digas "tentativa e erro" a não ser que te lembres de ter comparado resumos
 
 ## 10b. O paradoxo do few-shot (0:30)
 *(O professor gostou deste slide. Curto, sem explicar tudo.)*
-"Esperava que dar exemplos ajudasse, mas não ajudou. Em violência doméstica, o MCC desce de 0,592 para 0,486, e a revocação da classe rara de 0,619 para 0,429. Em incumprimento o MCC sobe um pouco, mas o macro-F1 desce e a revocação da classe favorável cai de 0,833 para 0,333." *(slide 12; §6.1.3, Tabela 5.11)*
+"Esperava que dar exemplos ajudasse, mas não ajudou. Em violência doméstica, o MCC desce de 0,592 para 0,486 e o macro-F1 de 0,783 para 0,696. Em incumprimento o MCC sobe um pouco, de 0,468 para 0,523, mas o macro-F1 desce de 0,663 para 0,631." *(slide 12; §6.1.3, Tabela 5.11)*
 "É compatível com um só exemplo por classe ser uma âncora fraca, mas não o testei." *(só um exemplo por classe por limite de hardware)*
 
 ## 11. SHAP (0:40)
