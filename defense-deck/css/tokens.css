@@ -1,0 +1,38 @@
+/* ==========================================================================
+   tokens.css - the "design tokens": colours, font, sizes used everywhere.
+   Change a value here and the whole deck follows.
+   ========================================================================== */
+
+/* Open Sans (SIL Open Font License) bundled locally: works offline. */
+@font-face { font-family: "Open Sans"; font-weight: 400; font-style: normal; font-display: block; src: url("../assets/fonts/OpenSans-400.woff2") format("woff2"); }
+@font-face { font-family: "Open Sans"; font-weight: 400; font-style: italic; font-display: block; src: url("../assets/fonts/OpenSans-400i.woff2") format("woff2"); }
+@font-face { font-family: "Open Sans"; font-weight: 600; font-style: normal; font-display: block; src: url("../assets/fonts/OpenSans-600.woff2") format("woff2"); }
+@font-face { font-family: "Open Sans"; font-weight: 700; font-style: normal; font-display: block; src: url("../assets/fonts/OpenSans-700.woff2") format("woff2"); }
+@font-face { font-family: "Open Sans"; font-weight: 700; font-style: italic; font-display: block; src: url("../assets/fonts/OpenSans-700i.woff2") format("woff2"); }
+
+:root {
+  /* brand palette (from the Canva deck) */
+  --maroon: #6c2118;
+  --orange: #cf5c00;
+  --terracotta: #c3542b;
+  --salmon: #f09978;
+  --beige: #f6e0d6;
+  --slate: #394c60;
+  --white: #ffffff;
+  --ink: #26221f;
+
+  /* status colours: green / amber / grey (status only, never domain) */
+  --ok: #2f8a4c;      --ok-dark: #1b5e30;
+  --warn: #e3b23c;    --warn-dark: #a87400;
+  --na: #a3a8ad;      --na-dark: #5f6368;
+  --bad: #a8322a;     --bad-2: #c8564b;     /* limitations / "wrong" */
+
+  /* domain code (rows of the results table): colour = domain ONLY */
+  --dv-row: #f6e0d6;
+  --boc-row: #f09978;
+
+  --font: "Open Sans", Arial, Helvetica, sans-serif;
+  --radius-card: 24px;
+  --band-h: 150px;
+  --footer-h: 90px;
+}

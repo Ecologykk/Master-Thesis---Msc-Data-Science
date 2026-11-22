@@ -1,0 +1,16 @@
+/* ==========================================================================
+   print.css - used with  index.html?print  : every main slide on its own page
+   with ALL steps visible. In the browser: Ctrl+P -> "Save as PDF" (Layout:
+   Landscape, Margins: None, tick "Background graphics").
+   ========================================================================== */
+.mode-print body { background: #888; }
+.mode-print #app { width: auto; height: auto; }
+.print-page { width: 1920px; height: 1080px; margin: 20px auto; position: relative; background: #fff; page-break-after: always; break-after: page; }
+.print-host { width: 1920px; height: 1080px; }
+.print-page.appx { outline: 8px solid var(--orange); }
+@page { size: 1920px 1080px; margin: 0; }
+@media print {
+  .mode-print body { background: #fff; }
+  .print-page { margin: 0; outline: 0 !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
