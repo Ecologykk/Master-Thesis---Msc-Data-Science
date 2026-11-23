@@ -1474,7 +1474,7 @@
       "The manuscript also lists guardrails (at least 70% anchored sentences, per-group caps, at most 6 anchorless). They were not applied in the code, although the manuscript lists them (a small slip). Only if asked: anchored sentences first by score, then the rest by score, with the token budget as the limit.",
       "Pipeline: split into sentences and encode (frozen LegalBERTimbau), score, keep the best until 9,000 tokens, restore the original order. Result: about 5,400 tokens on average, 46.8% (DV) and 51.2% (BoC) shorter.",
       "Zoom: score = 0.52 query + 0.26 anchors + 0.22 centroid. Weights set by hand, informally, never tuned or validated.",
-      "Decision: legal grounds first (query > anchors > centroid). Trade-off: hand-set weights (0.7 : 0.35 : 0.3, normalised), possible information loss; future work: tune against judge-annotated sentences or learn them.",
+      "Decision: bias towards the fundamentação (legal grounds first: query > anchors > centroid), original wording kept. Trade-off: possible information loss, hand-set weights (0.7 : 0.35 : 0.3, normalised), not expert-validated; future work: tune against judge-annotated sentences or learn them.",
       "If asked why these values: round relative weights normalised to sum 1; no ablation was run.",
       "This is a local engineering solution, not a scientific contribution."
     ],
@@ -1507,9 +1507,9 @@
         col(620, 600, '0.26', 'ANCHORS', 'phrases courts use for facts, norms, proof and reasoning', '«nos termos do artigo» · «entende o tribunal» · «não assiste razão»') +
         col(1240, 600, '0.22', 'CENTROID', 'closeness to the average of the whole document: keeps the case context', '(not a phrase: a similarity score)') +
         box({ x: 0, y: 450, w: 900, h: 190, style: 'background:#d8eadd;border:4px solid #2f8a4c;border-radius:26px;padding:16px 26px' },
-          '<div style="font-size:26px;font-weight:700;color:#2f8a4c">DECISION</div><div style="font-size:28px;font-weight:700;color:' + INK + ';line-height:1.25;margin-top:6px">Legal grounds first: query &gt; anchors &gt; centroid</div><div style="font-size:28px;font-weight:700;color:#2f8a4c;line-height:1.25;margin-top:8px">+ keeps the judges\' original wording</div>') +
+          '<div style="font-size:26px;font-weight:700;color:#2f8a4c">DECISION</div><div style="font-size:28px;font-weight:700;color:' + INK + ';line-height:1.3;margin-top:6px">Bias towards the <i>fundamentação</i>: the judge\'s analysis of the case<br>Keeps the judges\' original wording</div>') +
         box({ x: 940, y: 450, w: 900, h: 190, style: 'background:#fbe3df;border:4px solid #a8322a;border-radius:26px;padding:16px 26px' },
-          '<div style="font-size:26px;font-weight:700;color:#a8322a">TRADE-OFF</div><div style="font-size:30px;font-weight:700;color:' + INK + ';line-height:1.25;margin-top:6px">Weights set by hand (0.7 : 0.35 : 0.3, normalised):<br>never tuned, not expert-validated</div>');
+          '<div style="font-size:26px;font-weight:700;color:#a8322a">TRADE-OFF</div><div style="font-size:28px;font-weight:700;color:' + INK + ';line-height:1.3;margin-top:6px">Possible information loss<br>Weights set by hand<br>Not expert-validated</div>');
       return box({ x: 0, y: 0, w: 1920, h: 760, cl: '0-0:on', cls: 'only' }, s0) +
         box({ x: 40, y: 20, w: 1840, h: 700, at: 1, cl: '1-1:on', cls: 'only' }, s1);
     }

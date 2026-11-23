@@ -85,7 +85,7 @@ Atenção: o manuscrito diz "cerca de 5 400 tokens" e que nenhum caso atingiu o 
 `[CLICK]` *(Zoom na pontuação.)*
 "A pontuação mistura três coisas. A maior é a query: umas frases curtas que escrevi sobre porque é que um tribunal mantém ou altera uma decisão. Quanto mais perto delas, mais pontuação. A seguir, as âncoras: expressões típicas dos acórdãos, como 'nos termos do artigo' ou 'entende o tribunal'. E por fim o centroide, que mede quão perto a frase está da média do documento, para manter o contexto." *(slide 8 zoom; main.tex linhas 1663-1666)*
 "Porquê estes pesos? Escolhi-os à mão, de forma informal, e não avaliei outros valores. Por isso, por favor, não leiam 0,52, 0,26 e 0,22 como os números ótimos. O que eu decidi foi a ordem: acredito que os fundamentos jurídicos dão mais sinal para a decisão final, e os outros dois só ajudam um pouco." *(main.tex linha 1667: "manually selected and without any formal evaluation")*
-"O ideal era otimizar estes pesos com frases anotadas por juízes, ou aprendê-los com outro modelo. Deixo isso como trabalho futuro. É uma solução prática de engenharia, não uma contribuição científica."
+"O ideal era otimizar estes pesos com frases anotadas por juízes, ou aprendê-los com outro modelo. Deixo isso como trabalho futuro. O outro compromisso é a possível perda de informação: as frases que ficam de fora podem fazer falta. É uma solução prática de engenharia, não uma contribuição científica."
 Se perguntarem "porque estes valores?": "São pesos relativos redondos, 0,7, 0,35 e 0,3, normalizados para somar 1. Não fiz ablação."
 Não digas "tentativa e erro" a não ser que te lembres de ter comparado resumos: não há registo disso no repositório.
 
