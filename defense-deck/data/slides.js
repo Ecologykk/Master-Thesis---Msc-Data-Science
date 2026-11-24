@@ -62,9 +62,9 @@
 
   /* ======================= 0  COVER ======================= */
   slides.push({
-    id: 'cover', number: null, title: 'Legal Judgement Prediction and Explanation using LLMs in the Portuguese context', layout: 'cover',
+    id: 'cover', number: null, title: 'Legal Judgment Prediction and Explanation in the Portuguese Context', layout: 'cover',
     cover: {
-      title: 'Legal Judgement Prediction and Explanation using LLMs in the Portuguese context',
+      title: 'Legal Judgment Prediction and Explanation in the Portuguese Context',
       by: 'Helton Mendonça &nbsp;·&nbsp; Nº 56870',
       supervisors: '<b>Supervisor:</b> Prof. Dr Francisco Couto<br><b>Co-Supervisor:</b> Judge Dr Sofia Wengorovius'
     },
@@ -1712,7 +1712,7 @@
 
   root.DECK = {
     meta: {
-      title: 'Legal Judgement Prediction and Explanation using LLMs in the Portuguese context',
+      title: 'Legal Judgment Prediction and Explanation in the Portuguese Context',
       author: 'Helton Mendonça',
       targetMinutes: 23,
       hardStopMinutes: 30,
