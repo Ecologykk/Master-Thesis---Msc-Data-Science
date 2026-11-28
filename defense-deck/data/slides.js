@@ -75,15 +75,7 @@
   slides.push({
     id: 'context-1', number: 1, title: 'Context &amp; Motivation', layout: 'custom',
     steps: [{ cue: 'Portugal\'s own data: pending cases' }, { cue: 'Europe\'s view, 2026' }, { cue: 'A year earlier: 2025 vs 2026' }],
-    notes: [
-      "Motivation = efficiency of the justice system in general; DV and BoC are only my scope.",
-      "605,550 pending at 31 Dec 2025: +4.1% vs 2024 (Nº 106, provisional); excludes sentence-execution courts.",
-      "Pending is not the same as delayed (DGPJ footnote); 2024 revised: 583,890 (Nº 103) vs about 581.6k implied.",
-      "Thesis cites 583,890 (Nº 103 basis): visible in the left chart.",
-      "Scope caveat: the 2026 deterioration is in Administrative and Tax Courts, not the courts I study: a system-wide trend.",
-      "Civil/commercial 2026: clearance rate below 100%, backlog increased further (p.7); 263 days first instance (all litigious civil/commercial cases).",
-      "2025 edition: some further progress at first instance; serious concerns in second instance (SWD(2025) 922, p.6)."
-    ],
+    notes: '',
     sources: [
       { label: 'DGPJ Destaque anual Nº 103 (Oct 2025)', url: URL.stats103 },
       { label: 'DGPJ Destaque Nº 106 (Apr 2026)', url: URL.stats106 },
@@ -138,15 +130,7 @@
   slides.push({
     id: 'context-2', number: 2, title: 'Context &amp; Motivation', layout: 'custom',
     steps: [{ cue: 'BES case' }, { cue: 'The facts' }, { cue: 'RTP headline + sources' }, { cue: 'It also hits companies' }],
-    notes: [
-      "GES/BES: people affected by a criminal case that is still running after more than ten years.",
-      "Step 4: 'People to companies': stakeholder statements, not causal proof.",
-      "Limits: qualitative stakeholder and survey statements; association, not proven causal effect.",
-      "263 days refers to all civil/commercial litigious cases, not just company disputes.",
-      "INE 2025 survey (Semester report p.11): firms ranked the judicial system the biggest obstacle to their operations.",
-      "Older, notes only: Banco de Portugal staff article (Pereira & Wemans, ree201701) citing the 2015 INE survey.",
-      "Do not use: Doing Business (discontinued); the Hotel Neptuno case (unverified)."
-    ],
+    notes: '',
     sources: [
       { label: 'DCIAP: summary of the GES/BES indictments (PDF)', url: URL.dciap },
       { label: 'RTP: more than 100 victims have died waiting', url: URL.rtp },
@@ -380,18 +364,7 @@
   slides.push({
     id: 'smart-summarization', number: 11, title: 'LLMs: Smart Summarization', layout: 'custom',
     steps: [{ cue: 'Split, encode, score' }, { cue: 'Zoom: the three scoring components' }, { cue: 'Select and reorder' }, { cue: 'Compact summary + numbers' }, { cue: 'Limitations' }],
-    notes: [
-      "Pipeline: split, score, select, reorder, compact summary.",
-      "Zoom: score = 0.52 query + 0.26 anchors + 0.22 centroid.",
-      "Query: 5 Portuguese sentences on why courts keep or change a decision.",
-      "Anchors: phrases courts use for facts, norms, proof, reasoning.",
-      "Say out loud: hand-engineered with AI help; not validated by legal experts.",
-      "If asked why 0.52/0.26/0.22: code defaults 0.7 query : 0.35 anchor : 0.3 centroid, divided by their sum 1.35 (0.519/0.259/0.222). Round relative weights, not optimised.",
-      "Rationale = ranking: query intent first, legal anchors second, whole-document centroid last.",
-      "No ablation or tuning was run: a grid search against annotated 'key sentences' is future work.",
-      "About 5,400 tokens on average; 9,000 cap never reached.",
-      "A local engineering solution, not a scientific contribution."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       var BX = function (i) { return 80 + i * 298; };
@@ -476,14 +449,7 @@
   slides.push({
     id: 'headline-results', number: 13, title: 'Results', layout: 'custom',
     steps: [{ cue: 'Domestic violence in focus (BoC greyed out)' }, { cue: 'Breach of contract in focus (DV greyed out)' }],
-    notes: [
-      "Step 1: DV in focus (BoC greyed out). Step 2: BoC in focus (DV greyed out).",
-      "BERT sits at the left edge, DeepSeek zero-shot is furthest right.",
-      "Dark = MCC, light = Macro-F1; blue = DV, orange = BoC. Rings = best per domain and metric.",
-      "BERT: one class predicted, so MCC 0.000 and the interval is a single point.",
-      "Wide whiskers = only 50 test cases per domain: estimates, not proof of general superiority.",
-      "Values: dissertation Table 5.11. Few-shot vs zero-shot is covered on its own slide."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       /* values copied from the dissertation, Table 5.11 (All Models Summary Comparison) */
@@ -544,14 +510,7 @@
     columns: '1fr 1fr', cardsH: 470, fs: 33,
     caption: { at: 2, html: 'Under the protocol tested, DeepSeek generalised better than BERT, to future cases of the same courts and domains only; nothing beyond that is claimed.' },
     steps: [{ cue: 'How fair the test is' }, { cue: 'What it shows' }, { cue: 'Claim, bounded' }],
-    notes: [
-      "BERT does not generalise: MCC 0.000 on train, validation, test.",
-      "DeepSeek zero-shot: some generalisation, wide intervals.",
-      "Test = newest cases; cutoffs DV 2025-05-01, BoC 2023-10-01.",
-      "Caveat: retrospective classification of appeals already written.",
-      "Claim bounded: same courts and domains only.",
-      "If pushed: DeepSeek may have seen public DGSI texts; check its cutoff."
-    ],
+    notes: '',
     sources: []
   });
 
@@ -564,15 +523,7 @@
     columns: '1fr 1fr', cardsH: 500, fs: 30,
     caption: { at: 2, html: 'This fine-tuning setup could not learn the task from ~1-2k cases.<br>However BERT stayed useful as the sentence encoder of the LLM summarization pipeline.' },
     steps: [{ cue: 'Underfitting, not overfitting' }, { cue: 'Consistent with (not tested)' }, { cue: 'Take-away' }],
-    notes: [
-      "Supervisor: testing is valid; the collapse is a result.",
-      "DV: MCC 0.000 on all splits; KEPT for everything.",
-      "BoC: MCC 0.303 train, 0.184 validation, 0.000 test.",
-      "Underfitting, not overfitting: no train/test gap.",
-      "Consistent with: heavy regularisation, low learning rate, no search, domain shift, 16 windows.",
-      "None tested one by one; untuned baseline, the slide says so.",
-      "Encoder stayed useful, frozen, for summarisation."
-    ],
+    notes: '',
     sources: []
   });
 
@@ -580,14 +531,7 @@
   slides.push({
     id: 'scale-methods', number: 16, title: 'Scale and methods, Not Capability', layout: 'custom',
     steps: [{ cue: 'Long 2018' }, { cue: 'Menezes-Neto 2022' }, { cue: 'Bertalan 2024' }, { cue: 'This thesis' }, { cue: 'Two differences: method and scale' }, { cue: 'Not BERT per se' }],
-    notes: [
-      "Older numbers look better: different input, different split.",
-      "Long: facts + pleas + law articles; random split.",
-      "Bertalan: outcome terms kept; random 10-fold; plain GRU matches.",
-      "Menezes-Neto: temporal, no leakage; 700k appeals, best MCC 0.37.",
-      "Here: 1-2k cases and the ruling removed.",
-      "Real prediction should precede judgment; that data is sensitive."
-    ],
+    notes: '',
     sources: [{ label: 'Long et al. 2018 (arXiv:1809.06537)', url: URL.long }, { label: 'Menezes-Neto 2022 (PLOS ONE)', url: URL.menezes }, { label: 'Bertalan 2024 (arXiv:2207.08823)', url: URL.bertalan }],
     html: function () {
       var COLS = '260px 190px 290px 250px 170px 1fr';
@@ -616,15 +560,7 @@
   slides.push({
     id: 'few-shot-paradox', number: 17, title: 'The few-shot paradox', layout: 'custom',
     steps: [{ cue: 'Zero-shot values (DV, BoC)' }, { cue: 'Few-shot values appear' }, { cue: 'Take-away' }],
-    notes: [
-      "A genuine negative result, not a bug.",
-      "DV: MCC 0.592 to 0.486; minority recall 0.619 to 0.429.",
-      "BoC: MCC up, Macro-F1 down, FAVORABLE recall 0.833 to 0.333.",
-      "k=1 per class: thin, high-variance anchor; similarity is only a proxy.",
-      "Caution: n=50, CIs overlap; I do not claim few-shot is worse.",
-      "Land it: small local model, no training, already beats BERT.",
-      "If asked: no like-for-like LLM studies in related work."
-    ],
+    notes: '',
     sources: [{ label: 'Alfieri et al. 2024 (CEUR-WS Vol-4089, paper 2)', url: URL.alfieri }, { label: 'Hannan 2026 (arXiv:2510.27675)', url: URL.hannan }, { label: 'Min et al. 2022 (arXiv:2202.12837)', url: URL.min }],
     html: function () {
       function row(label, z, f, up) {
@@ -660,13 +596,7 @@
     ],
     caption: { at: 5, html: 'With no training and no examples, one prompt already reached MCC 0.59 / 0.47: the pipeline around the model is where the headroom is.' },
     steps: [{ cue: 'Few-shot' }, { cue: 'Summary' }, { cue: 'Untested' }, { cue: 'Models' }, { cue: 'Evaluation' }, { cue: 'Headroom' }],
-    notes: [
-      "Few-shot: k=1 pulled toward majority; better selection.",
-      "Summary: hand-set weights; measure what is lost.",
-      "Untested: RAG over statutes and precedents, CoT ablation.",
-      "Models: only one 8B family run.",
-      "Evaluation: n=50, wide CIs; larger judge-validated set."
-    ],
+    notes: '',
     sources: []
   });
 
@@ -674,20 +604,7 @@
   slides.push({
     id: 'shap', number: 19, title: 'SHAP on a Collapsed BERT', layout: 'custom',
     steps: [{ cue: 'What SHAP is (football analogy)' }, { cue: 'The model learned nothing' }, { cue: 'The scale: 48.9% → 83.6%' }, { cue: 'Top sentences, in percentage points' }, { cue: 'Nothing to validate' }],
-    notes: [
-      "Baseline = what the model outputs when ALL text is masked.",
-      "Masked text is fed as the literal string \"...\" (explanation.py L92-103), not an empty string.",
-      "Baseline output: 48.9% KEPT / 51.1% ALTERED, about a coin flip: the model's prior with no information.",
-      "Train split (DV, before cutoff, n=1,064): 51.9% KEPT / 48.1% ALTERED; baseline is close but not literally that.",
-      "Training used balanced class weights + label smoothing, pushing uninformative inputs to about 50/50.",
-      "Then: baseline 48.9 + all 367 sentences (+34.8) = 83.6% KEPT.",
-      "Which class is pushed? KEPT (decisão mantida) = predicted class; 0-100 = probability of KEPT in %.",
-      "Analogy: scoreboard says HOME WIN every match; KEPT probabilities 77.5-87.8% in 5 of 5 DV cases.",
-      "Case 5052 was truly ALTERED yet predicted KEPT (86.9%).",
-      "Strongest sentence +0.57 points; median 0.08; 356 up, 11 down.",
-      "Analogy limit: SHAP explains the model's behaviour, not legal reality; intuition only.",
-      "If asked BoC: max about 2.9 points; repeated monetary figures (backup A4)."
-    ],
+    notes: '',
     sources: [{ label: 'SHAP: Lundberg & Lee 2017 (arXiv:1705.07874)', url: URL.shap }, { label: 'Case 65/24.0GEBRG.G1 (jurisprudencia.csm.org.pt)', url: URL.shapCase }],
     html: function () {
       /* real values: sentence-level SHAP of bert_v3 on DV case 65/24.0GEBRG.G1, class KEPT (decisao_mantida), in percentage points */
@@ -786,14 +703,7 @@
   slides.push({
     id: 'llm-reasoning', number: 20, title: 'Reading the LLM\'s Reasoning', layout: 'custom',
     steps: [{ cue: 'Case + reasoning trace' }, { cue: 'True label vs prediction' }, { cue: 'Fluent, legally framed and wrong' }],
-    notes: [
-      "Verbatim think-trace from thesis appendix; cuts marked (...).",
-      "True label ALTERED; model said KEPT.",
-      "Fluent and legal-sounding, yet wrong.",
-      "Turpin et al. 2023: convincing explanations for wrong answers.",
-      "Versus SHAP: faithful to nothing learned; trace legible, not guaranteed faithful.",
-      "Neither validated by experts, so RQ2 stays partial."
-    ],
+    notes: '',
     sources: [{ label: 'Case 236/23.6PBHRT.L1-9 (jurisprudencia.csm.org.pt)', url: URL.case236 }, { label: 'Turpin et al. 2023 (arXiv:2305.04388)', url: URL.turpin }],
     html: function () {
       return '' +
@@ -815,14 +725,7 @@
   slides.push({
     id: 'judge-validation', number: 21, title: 'Judge Validation', layout: 'custom',
     steps: [{ cue: 'App demo video (press V to play)' }, { cue: 'Agreement counts' }, { cue: 'Footnote' }],
-    notes: [
-      "Press V to play or pause the demo video (audience window).",
-      "FIRST: click once inside the audience window, so sound is allowed.",
-      "Without a click the video starts muted; a click turns sound on.",
-      "Status chip in the presenter bar shows playing / blocked.",
-      "Video uses test accounts only; counts are small, comments matter more.",
-      "Footnote: BoC 20 / 20 excluding one judge, chosen a posteriori."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       function tile(y, tag, num) {
@@ -861,10 +764,10 @@
   slides.push({
     id: 'rqs-objectives', number: 23, title: 'RQs and Objectives', layout: 'statusRows', badgeW: 400, fs: 38,
     rows: [
-      { status: 'green', badge: 'RQ1: Answered', html: 'DeepSeek zero-shot outperforms fine-tuned LegalBERTimbau (MCC 0.592/0.468 vs 0.000) within this protocol.' },
-      { status: 'amber', at: 1, badge: 'RQ2: Partially', html: 'Both models produce explanations (SHAP / reasoning traces), but neither validated against expert legal judgment.' },
-      { status: 'grey', at: 2, badge: 'RQ3: Unanswered', html: 'DV vs BoC confidence intervals overlap; insufficient statistical power at n=50 per domain.' },
-      { status: 'green', at: 3, badge: 'OBJECTIVES', html: '<span style="white-space:pre-wrap">O1 ✓     O2 ✓     O3 — XAI explored, but not validated by a legal expert (same gap as RQ2).</span>' }
+      { status: 'green', badge: 'RQ1: Answered', html: '<span><b>DeepSeek zero-shot outperforms fine-tuned LegalBERTimbau</b> (MCC 0.592/0.468 vs 0.000) within this protocol.</span>' },
+      { status: 'amber', at: 1, badge: 'RQ2: Partially', html: '<span><b>Because the explanations were not validated by experts.</b> Both models produce them (SHAP / reasoning traces).</span>' },
+      { status: 'grey', at: 2, badge: 'RQ3: Unanswered', html: '<span><b>No evidence of a difference between DV and BoC</b>: the confidence intervals overlap (n=50 each).</span>' },
+      { status: 'green', at: 3, badge: 'OBJECTIVES', html: '<span><b style="white-space:pre-wrap">O1 ✓    O2 ✓    O3 partial</b>: XAI explored, but not validated by a legal expert (same gap as RQ2).</span>' }
     ],
     steps: [{ cue: 'RQ1 answered' }, { cue: 'RQ2 partially' }, { cue: 'RQ3 unanswered' }, { cue: 'Objectives' }],
     notes: '', sources: []
@@ -899,14 +802,7 @@
   slides.push({
     id: 'biases-dv', number: 25, title: 'Biases: Domestic Violence', layout: 'custom',
     steps: [{ cue: 'DATA: class balance (DV)' }, { cue: 'DATA: outcome mix by year (DV)' }, { cue: 'DATA: judge gender (DV)' }, { cue: 'Reading' }],
-    notes: [
-      "Backup for bias questions (DV half).",
-      "Classes 52.2% KEPT, 47.8% ALTERED.",
-      "Outcome mix drifts by year; temporal split answers it.",
-      "Judge gender via gender-guesser; no clear skew.",
-      "Exploratory check only; AI360 and Responsible AI Toolbox not used.",
-      "BERT: inverse-frequency weights; report MCC and Macro-F1."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       return biasChartsHtml(['bias_class_balance_dv.png', 'bias_outcome_by_year_dv.png', 'bias_judge_gender_dv.png'],
@@ -920,15 +816,7 @@
   slides.push({
     id: 'biases-boc', number: 26, title: 'Biases: Breach of Contract', layout: 'custom',
     steps: [{ cue: 'DATA: class balance (BoC)' }, { cue: 'DATA: outcome mix by year (BoC)' }, { cue: 'DATA: judge gender (BoC)' }, { cue: 'LABELS and MODELS' }, { cue: 'Closing line' }],
-    notes: [
-      "BoC half, plus LABELS and MODELS for both domains.",
-      "Classes 50.3 / 28.3 / 21.4%; few cases before about 2004.",
-      "Gender: small differences; not a fairness test.",
-      "Labels: regex on the Dispositivo; judges criticised the scheme.",
-      "Edge case: parcialmente improcedente.",
-      "Models: no fairness analysis; prerequisite for deployment.",
-      "Databases are published for lawyers; reuse is secondary."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       return biasChartsHtml(['bias_class_balance_boc.png', 'bias_outcome_by_year_boc.png', 'bias_judge_gender_boc.png'],
@@ -974,14 +862,7 @@
       { title: 'CANNOT (YET)', cls: 'cannot', at: 1, html: '<p>Steps where risk and interpretation are high, like the decision itself: <b>a human decides.</b></p>' }
     ],
     steps: [{ cue: 'Can help' }, { cue: 'Cannot (yet)' }],
-    notes: [
-      "Thesis: neither model suitable for autonomous decision-aiding.",
-      "Low-risk uses: routing, prioritisation, process automation, ranking.",
-      "My nuance: the line is risk and interpretation, not AI vs human.",
-      "Low risk, little to interpret: some autonomy, depending on context.",
-      "The decision itself: a human decides.",
-      "Next: The Answer; the agentic slide is an outside view."
-    ],
+    notes: '',
     sources: []
   });
 
@@ -995,15 +876,7 @@
       { html: 'What if research teams worked inside the justice system, side by side with the people who use it?', fs: 42, cls: 'pill q', at: 3 }
     ],
     steps: [{ cue: 'The January question' }, { cue: 'Not by themselves' }, { cue: 'Inside a well-designed system' }, { cue: 'Closing question' }],
-    notes: [
-      "Answers my own January question; deliberately soft.",
-      "Domain knowledge first; LLMs need a system around them.",
-      "Autonomy only where risk and interpretation are low.",
-      "Closing question: teams inside the system, institutions investing.",
-      "Personal view, not from the manuscript; I may be wrong.",
-      "Do NOT name an institution on the slide.",
-      "Next slides: an outsider's illustration, not the solution."
-    ],
+    notes: '',
     sources: []
   });
 
@@ -1011,18 +884,7 @@
   slides.push({
     id: 'single-case', number: 30, title: 'A Single Case, Step by Step', layout: 'custom',
     steps: [{ cue: 'Why walk through one case?' }, { cue: 'Stages 1-4' }, { cue: 'Stages 5-8' }, { cue: 'The Acórdão: input of this thesis' }],
-    notes: [
-      "Say out loud: an extra, an outsider's example; an expert would correct it.",
-      "Petição Inicial (Art. 552º): the plaintiff states facts, grounds, claim.",
-      "Contestação (Art. 572º): the defendant answers and raises exceptions.",
-      "Audiência Prévia (Arts. 591º-595º): parties and judge delimit the dispute.",
-      "Instrução (Art. 410º): proof on the themes of proof.",
-      "Audiência Final (Arts. 603º-606º): testimony and oral arguments.",
-      "Sentença (Art. 607º): the judge decides: facts, norms, decision.",
-      "Apelação (Art. 644º): appeal to the higher court.",
-      "Acórdão: the appeal ruling; the input of this thesis.",
-      "Not domestic violence: that is criminal procedure (CPP)."
-    ],
+    notes: '',
     sources: [
       { label: '1. Petição Inicial: CPC Art. 552º', url: cpc(552) }, { label: '2. Contestação: CPC Art. 572º', url: cpc(572) },
       { label: '3. Audiência Prévia: CPC Arts. 591º-595º (opens 591º)', url: cpc(591) }, { label: '4. Fase de Instrução: CPC Art. 410º', url: cpc(410) },
@@ -1065,15 +927,7 @@
     id: 'agentic', number: 32, title: 'A Possible Agentic System', layout: 'custom', live: 'agenticLive',
     steps: [{ cue: 'One case enters' }, { cue: '1 Petição Inicial' }, { cue: '2 Contestação' }, { cue: '3 Audiência Prévia' }, { cue: '4 Instrução' }, { cue: '5 Audiência Final' },
       { cue: '6 Sentença (human only)' }, { cue: '7 Apelação' }, { cue: '8 Acórdão (this thesis)' }, { cue: 'Two kinds of memory' }, { cue: 'The decision stays with the judge' }],
-    notes: [
-      "Say out loud: outsider's view; a domain expert would correct the stages.",
-      "After LegalWorld (Fudan, 2026), adapted to the CPC. Not built, not evaluated.",
-      "Several small agents per stage; sub-steps follow what each CPC article asks.",
-      "Stage 4: the parties validate the evidence summaries.",
-      "Stage 6 Sentença: no model; judge decides alone. Stage 8: input of this thesis.",
-      "Simplified: CPC has loops (Art. 590º, 662º); not drawn.",
-      "If asked: deployed? Only assistants; the human judge decides."
-    ],
+    notes: '',
     sources: [{ label: 'LegalWorld (Fudan, 2026), arXiv:2606.18728', url: URL.legalworld }, { label: 'SimCourt (arXiv:2508.17322)', url: URL.simcourt },
       { label: '1. Petição Inicial: CPC Art. 552º', url: cpc(552) }, { label: '2. Contestação: CPC Art. 572º', url: cpc(572) }, { label: '3. Audiência Prévia: CPC Arts. 591º-595º', url: cpc(591) },
       { label: '3b. Art. 596º: objeto do litígio e temas da prova', url: cpc(596) }, { label: '4. Fase de Instrução: CPC Art. 410º', url: cpc(410) }, { label: '4b. Art. 598º: requerimento probatório', url: cpc(598) },
@@ -1191,11 +1045,7 @@
   slides.push({
     id: 'appx-bert-curves', number: null, badge: 'A1', appendix: true, title: 'Backup: BERT training curves', layout: 'custom',
     steps: [{ cue: 'Loss curves, DV and BoC' }],
-    notes: [
-      "Backup: loss curves of the BERT fine-tuning.",
-      "Up to 20 epochs; early stopping, patience 7.",
-      "Use if asked how the collapse looked in training."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       return '' +
@@ -1210,11 +1060,7 @@
   slides.push({
     id: 'appx-umap', number: null, badge: 'A2', appendix: true, title: 'Backup: UMAP after fine-tuning', layout: 'custom',
     steps: [{ cue: 'UMAP, DV and BoC' }],
-    notes: [
-      "Backup: UMAP of embeddings after fine-tuning.",
-      "DV: one elongated, one small cluster; BoC: about two clusters.",
-      "Classes stay intermixed: structure follows text style, not outcome."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       return '' +
@@ -1229,12 +1075,7 @@
   slides.push({
     id: 'appx-fewshot-retrieval', number: null, badge: 'A3', appendix: true, title: 'Backup: few-shot retrieval pipeline', layout: 'custom',
     steps: [{ cue: 'Query, candidates, similarity' }, { cue: 'Rank, select, examples' }],
-    notes: [
-      "Backup: few-shot retrieval pipeline.",
-      "Query and candidates already summarised.",
-      "Rank-weighted cosine similarity; top candidate per class (k=1).",
-      "Diversity filter unused (see Limitations)."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       var BX = function (i) { return 60 + i * 366; };
@@ -1256,12 +1097,7 @@
   slides.push({
     id: 'appx-shap-boc', number: null, badge: 'A4', appendix: true, title: 'Backup: SHAP on BoC', layout: 'custom',
     steps: [{ cue: 'Top positive / negative sentences, BoC' }],
-    notes: [
-      "Backup: SHAP on a BoC case, top sentences.",
-      "Positive and negative comparable in size.",
-      "Many refer to monetary amounts in the case report.",
-      "Max attribution about 2.9 points; not legal reasoning."
-    ],
+    notes: '',
     sources: [],
     html: function () {
       return '' +
@@ -1285,14 +1121,7 @@
   slides.push({
     id: 'v2-context', number: 1, title: 'Context &amp; Motivation', layout: 'custom',
     steps: [{ cue: 'Pending cases and the EU assessment, before and after' }],
-    notes: [
-      "Left: DGPJ pending cases. Nº 103: 583,890 (31 Dec 2024) to 589,507 (30 Jun 2025). Nº 106: 605,550 at end of 2025 (+4.1%, provisional).",
-      "2024 was revised between the two reports: say the trend, not the exact difference.",
-      "Right: EU Rule of Law Report. 2025: 'some further progress' (p.6). 2026: 'no further progress' (p.2).",
-      "Slide says 'justice system' to stay on topic. If asked: the original wording is about administrative and tax courts (2025: first instance), and in 2026 about the justice system, in particular those courts.",
-      "Full 2026 quote: '(...) no further progress to improve the efficiency of the justice system, in particular of Administrative and Tax Courts, as the efficiency of these courts has further deteriorated.'",
-      "Name each source aloud (voice), the slide stays short."
-    ],
+    notes: '',
     sources: [
       { label: 'DGPJ Destaque anual Nº 103 (Oct 2025)', url: URL.stats103 },
       { label: 'DGPJ Destaque Nº 106 (Apr 2026)', url: URL.stats106 },
@@ -1324,15 +1153,7 @@
   slides.push({
     id: 'v2-dataprep', number: 5, title: 'Data and Preprocessing', layout: 'custom',
     steps: [{ cue: 'Funnel: 6,627 raw documents to 1,802 BoC and 1,126 DV' }],
-    notes: [
-      "Sources: dgsi.pt and jurisprudencia.csm.org.pt: public, pseudonymised, but low volume and little documentation.",
-      "Two domains, several courts (second instance, Supreme Court, peace courts).",
-      "Dropped: no extractable decision, no full text, duplicates. BoC -55.6%, DV -46.7%.",
-      "Labels: regex rules on the final verdict (dispositivo) of each ruling, found at the tail of the document (e.g. 'Dispositivo', 'Pelo exposto'): heuristic, not a legal ground truth. Judge-checked later (5 judges x 5 cases per domain).",
-      "Class encodings (code): DV 0 = KEPT, 1 = ALTERED (positive class); BoC 0 = UNFAVORABLE, 1 = PARTIAL, 2 = FAVORABLE.",
-      "Final counts: BoC 1,802 (3 classes), DV 1,126 (2 classes); Judge Sofia's correction included.",
-      "Class shares on the slide (dissertation, Basic statistics): DV 52.2% KEPT / 47.8% ALTERED; BoC 50.3% UNFAVORABLE / 21.4% PARTIAL / 28.3% FAVORABLE."
-    ],
+    notes: '',
     sources: [],
     footnote: 'Dissertation · Fig. 3.1 (data scraping and preprocessing pipeline), Ch. 3 · class-engineering regexes: Appendix',
     html: function () {
@@ -1374,45 +1195,23 @@
   /* ---- HOW 2: methodology and evaluation on one timeline ---- */
   slides.push({
     id: 'v2-methodeval', number: 6, title: 'Method and Evaluation', layout: 'custom',
-    steps: [{ cue: 'Timeline, metrics and the stratified bootstrap' }],
-    notes: [
-      "Known bug, only if asked: the BERT split is not strictly temporal (DGSI dates were not parsed); the test set and the few-shot examples are unaffected."
-    ],
+    steps: [{ cue: 'Temporal split, gold test set, metrics' }],
+    notes: '',
     sources: [],
     footnote: 'Dissertation · §4.7 (evaluation methodology), §4.7.1 (metrics), §4.7.2 (stratified bootstrap confidence intervals) · data splitting strategy: Ch. 3',
     html: function () {
-      var lb = '', sv = ln(1200, 10, 1200, 215, MAROON, 5, '12 8');
-      /* --- row A: timeline --- */
-      lb += box({ x: 80, y: 8, w: 1100, h: 48, style: 'background:#f6e0d6;border:3px solid ' + MAROON + ';border-radius:24px;font-size:26px;font-weight:700;color:' + MAROON + ';display:flex;align-items:center;justify-content:center' }, 'OLDER CASES: training + few-shot examples') +
-        box({ x: 1220, y: 8, w: 620, h: 48, style: 'background:' + MAROON + ';border-radius:24px;font-size:26px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center' }, 'NEWEST 50 CASES = TEST') +
-        chip(80, 70, 1100, 62, '#fff', SLATE, '<b>Fine-tuned LegalBERTimbau</b>', 26, 'border:3px solid ' + SLATE) +
-        chip(80, 146, 1100, 62, '#fff', SLATE, '<b>DeepSeek-R1-8B</b>: zero-shot and few-shot', 26, 'border:3px solid ' + SLATE) +
-        chip(1220, 70, 620, 138, '#fff', MAROON, 'Every test case is newer than every training case', 28, 'border:3px solid ' + MAROON + ';border-radius:26px') +
-        svg(arrow(1188, 101, 1214, 101, { w: 5 }) + arrow(1188, 177, 1214, 177, { w: 5 }) + sv);
-      /* --- row B left: the two metrics --- */
-      lb += box({ x: 80, y: 236, w: 700, h: 332, cls: 'dbox', style: 'border-color:' + SLATE + ';border-radius:26px;padding:14px 26px;background:#fff' },
-        '<div style="font-size:30px;font-weight:700;color:' + SLATE + '">Why these two metrics</div>' +
-        '<div style="font-size:27px;line-height:1.3;margin-top:14px"><b>MCC</b> (primary): uses the whole confusion matrix, so a one-class model scores 0.</div>' +
-        '<div style="font-size:27px;line-height:1.3;margin-top:18px"><b>Macro-F1</b> (complement): every class counts the same, so rare classes are not hidden.</div>');
-      /* --- row B right: stratified bootstrap (schematic) --- */
-      var bars = [1, 2, 4, 8, 14, 22, 33, 46, 60, 72, 80, 82, 76, 66, 54, 42, 30, 20, 13, 8, 4, 2, 1], n = bars.length, bx0 = 860, bw = 18, base = 520, k = 2.0, hh = '';
-      var tot = bars.reduce(function (a, b) { return a + b; }, 0), cum = 0;
-      bars.forEach(function (v, i) {
-        cum += v; var lo = (cum - v) / tot, hi = cum / tot;
-        var col = (hi <= 0.03) ? '#f4a6a6' : (lo >= 0.97) ? '#f4a6a6' : '#3b82f6';
-        hh += '<rect x="' + (bx0 + i * bw) + '" y="' + (base - v * k) + '" width="' + (bw - 2) + '" height="' + (v * k) + '" fill="' + col + '"/>';
-      });
-      hh += ln(bx0 - 6, base, bx0 + n * bw + 6, base, '#394c60', 3);
-      var xl = bx0 + 3 * bw, xu = bx0 + (n - 3) * bw;
-      hh += ln(xl, 336, xl, base, '#6c2118', 3, '8 6') + ln(xu, 336, xu, base, '#6c2118', 3, '8 6');
-      lb += box({ x: 820, y: 236, w: 1020, h: 332, cls: 'dbox', style: 'border-color:' + MAROON + ';border-radius:26px;background:#fff' }, '') +
-        svg(hh) +
-        box({ x: 840, y: 244, w: 560, h: 40, style: 'font-size:28px;font-weight:700;color:' + MAROON }, 'Stratified bootstrap, 1,000 times') +
-        box({ x: xl - 65, y: 288, w: 130, h: 44, style: 'font-size:19px;font-weight:700;color:#6c2118;text-align:center;line-height:1.15' }, '2.5th<br>percentile') +
-        box({ x: xu - 65, y: 288, w: 130, h: 44, style: 'font-size:19px;font-weight:700;color:#6c2118;text-align:center;line-height:1.15' }, '97.5th<br>percentile') +
-        box({ x: bx0 - 30, y: base + 6, w: 470, h: 30, style: 'font-size:17px;color:#5b5651;white-space:nowrap' }, 'middle 95% = the confidence interval (schematic)') +
-        box({ x: 1310, y: 300, w: 510, h: 240, style: 'font-size:30px;line-height:1.35;color:#26221f;display:flex;align-items:center' },
-          '<div><b>Why:</b> with only 50 cases, one score hides how much it could vary for the same cases</div>');
+      var lb = '';
+      /* --- row A: the temporal split, the main idea --- */
+      lb += box({ x: 80, y: 20, w: 1100, h: 70, style: 'background:#f6e0d6;border:4px solid ' + MAROON + ';border-radius:35px;font-size:34px;font-weight:700;color:' + MAROON + ';display:flex;align-items:center;justify-content:center' }, 'OLDER CASES: training + few-shot examples') +
+        box({ x: 1230, y: 20, w: 610, h: 70, style: 'background:' + MAROON + ';border-radius:35px;font-size:34px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:center' }, 'NEWEST 50 = GOLD TEST') +
+        chip(80, 118, 1100, 74, '#fff', SLATE, '<b>Fine-tuned LegalBERTimbau</b>', 30, 'border:3px solid ' + SLATE) +
+        chip(80, 210, 1100, 74, '#fff', SLATE, '<b>DeepSeek-R1-8B</b>: zero-shot and few-shot', 30, 'border:3px solid ' + SLATE) +
+        chip(1230, 118, 610, 166, '#fff', MAROON, '<div>50 per domain<br><span style="font-weight:500;font-size:27px">labels from regex rules<br>judges checked 5 of the 50</span></div>', 34, 'border:3px solid ' + MAROON + ';border-radius:30px') +
+        svg(ln(1205, 20, 1205, 290, MAROON, 5, '12 8') + arrow(1185, 155, 1225, 155, { w: 5 }) + arrow(1185, 247, 1225, 247, { w: 5 })) +
+        chip(330, 322, 1260, 90, MAROON, '#fff', 'Temporal split: every test case is newer than every training case', 34);
+      /* --- row B: evaluation in one line each --- */
+      lb += chip(80, 450, 860, 100, '#fff', SLATE, '<div><b>MCC</b> (primary) · <b>Macro-F1</b></div>', 36, 'border:3px solid ' + SLATE + ';border-radius:26px') +
+        chip(980, 450, 860, 100, '#fff', SLATE, '<div><b>95% CI</b>: stratified bootstrap, 1,000 resamples</div>', 32, 'border:3px solid ' + SLATE + ';border-radius:26px');
       /* --- row C: compromises --- */
       lb += box({ x: 80, y: 588, w: 400, h: 36, style: 'font-size:24px;font-weight:700;color:' + SLATE }, 'The compromises');
       ['Only two models', 'Only 50 test cases per domain', 'Labels from regex rules'].forEach(function (t, i) {
@@ -1426,13 +1225,7 @@
   slides.push({
     id: 'v2-bertwindow', number: 7, title: 'BERT: Sliding Window', layout: 'custom',
     steps: [{ cue: 'Problem (length), windows, mean pooling' }],
-    notes: [
-      "Problem: BERT reads 512 tokens; the judgment has about 20,600 (DV) or 10,800 (BoC).",
-      "Solution: overlapping 512-token windows (stride 128); keep 16 equally spaced windows, about 6.3k unique tokens.",
-      "Each window gives one [CLS] vector; mean pooling averages the 16 into one document vector.",
-      "Trade-off: the rest of the text is discarded, and the average gives every window the same weight, ignoring position and structure.",
-      "One training epoch took 4 to 6 hours on local hardware."
-    ],
+    notes: '',
     sources: [],
     footnote: 'Dissertation · §4.3.2 (sliding-window architecture) and §4.3.3 (window aggregation via mean pooling) · manuscript "Fine-tuned LegalBERT" = LegalBERTimbau',
     html: function () {
@@ -1464,23 +1257,14 @@
   /* ---- HOW 4: smart summarization, 2 steps ---- */
   slides.push({
     id: 'v2-summ', number: 8, title: 'LLMs: Smart Summarization', layout: 'custom',
-    steps: [{ cue: 'Pipeline: four moves' }, { cue: 'Zoom: the score, its decision and its trade-off' }],
-    notes: [
-      "Why: judgments are too long for the LLM on the available hardware (a bigger window hit memory limits and the model still got lost in the text); so keep only the sentences that matter the most.",
-      "Selection criterion (code): first the sentences that match a legal anchor, highest score first, until the 9,000-token budget; then the remaining sentences, highest score first, under the same budget (token estimate = characters / 4 + 2). The final run (budget9000 profile) used no anchor guardrails (about 77% of the selected sentences have no anchor).",
-      "Numbers measured on the final summaries (gold test sets): about 151 sentences (DV) and 154 (BoC) selected; about 5,400 words; about 8,500 (DV) and 8,700 (BoC) estimated tokens, so the 9,000 budget is close to being used; 84% (DV) and 88% (BoC) of cases are above 8,500 estimated tokens.",
-      "Careful: the manuscript says about 5,400 TOKENS and that no case reached the limit; those 5,400 are WORDS. By the code's own estimator the budget binds. Say words, or say estimated tokens near 8.5k.",
-      "Extractive: the selected sentences keep the judges' original wording (no paraphrasing); that is a decision and a pro of this approach.",
-      "The manuscript also lists guardrails (at least 70% anchored sentences, per-group caps, at most 6 anchorless). They were not applied in the code, although the manuscript lists them (a small slip). Only if asked: anchored sentences first by score, then the rest by score, with the token budget as the limit.",
-      "Pipeline: split into sentences and encode (frozen LegalBERTimbau), score, keep the best until 9,000 tokens, restore the original order. Result: about 5,400 tokens on average, 46.8% (DV) and 51.2% (BoC) shorter.",
-      "Zoom: score = 0.52 query + 0.26 anchors + 0.22 centroid. Weights set by hand, informally, never tuned or validated.",
-      "Decision: bias towards the fundamentação (legal grounds first: query > anchors > centroid), original wording kept. Trade-off: possible information loss, hand-set weights (0.7 : 0.35 : 0.3, normalised), not expert-validated; future work: tune against judge-annotated sentences or learn them.",
-      "If asked why these values: round relative weights normalised to sum 1; no ablation was run.",
-      "This is a local engineering solution, not a scientific contribution."
-    ],
+    steps: [{ cue: 'Idea, decision and trade-off' }],
+    notes: '',
     sources: [],
     footnote: 'Dissertation · Fig. 4.1 (smart summarization pipeline) · §4.5.2 (architecture) · §4.5.4 (limitations and trade-offs)',
-    html: function () {
+    html: function () { return summHtml(false); }
+  });
+
+  function summHtml(zoom) {
       var s0 = '', s1 = '';
       function step(x, n, title, sub, last) {
         return box({ x: x, y: 150, w: 400, h: 250, style: 'background:' + (last ? '#d8eadd' : '#f6e0d6') + ';border:4px solid ' + (last ? '#2f8a4c' : MAROON) + ';border-radius:28px;padding:20px 24px' },
@@ -1494,8 +1278,10 @@
         step(1040, 3, 'Select', 'anchored sentences first, then the rest, by score, up to 9,000 tokens') +
         step(1520, 4, 'Reorder', 'back to the original order → compact summary', true) +
         svg(arrow(484, 275, 556, 275, { w: 7 }) + arrow(964, 275, 1036, 275, { w: 7 }) + arrow(1444, 275, 1516, 275, { w: 7 })) +
-        chip(260, 470, 600, 130, '#fff', MAROON, '46.8% · 51.2%<br><span style="font-weight:500;font-size:25px">fewer sentences (DV · BoC)</span>', 40, 'border:4px solid ' + MAROON) +
-        chip(1000, 470, 660, 130, '#fff', MAROON, '≈ 8.5k tokens<br><span style="font-weight:500;font-size:25px">estimated, close to the 9,000 budget</span>', 40, 'border:4px solid ' + MAROON);
+        box({ x: 80, y: 450, w: 860, h: 236, style: 'background:#d8eadd;border:4px solid #2f8a4c;border-radius:26px;padding:20px 34px' },
+          '<div style="font-size:28px;font-weight:700;color:#2f8a4c">DECISION</div><div style="font-size:33px;font-weight:700;color:' + INK + ';line-height:1.35;margin-top:10px">Prioritises <i>fundamentação</i> phrases<br>Keeps the judges\' original wording</div><div style="font-size:25px;font-style:italic;color:' + MAROON + ';margin-top:8px">e.g. «entende o tribunal» · «apreciação da prova»</div>') +
+        box({ x: 980, y: 450, w: 860, h: 236, style: 'background:#fbe3df;border:4px solid #a8322a;border-radius:26px;padding:20px 34px' },
+          '<div style="font-size:28px;font-weight:700;color:#a8322a">TRADE-OFF</div><div style="font-size:33px;font-weight:700;color:' + INK + ';line-height:1.35;margin-top:10px">Possible information loss<br>Hand-set weights, not expert-validated</div>');
       function col(x, w, wt, name, what, ex) {
         return box({ x: x, y: 96, w: w, h: 330, cls: 'dbox', style: 'border-color:' + MAROON + ';border-radius:26px;padding:18px 24px;background:#fff' },
           '<div style="display:flex;align-items:baseline;gap:16px"><span style="font-size:60px;font-weight:700;color:#c3542b">' + wt + '</span><span style="font-size:28px;font-weight:700;color:' + SLATE + '">' + name + '</span></div>' +
@@ -1507,34 +1293,39 @@
         col(620, 600, '0.26', 'ANCHORS', 'phrases courts use for facts, norms, proof and reasoning', '«nos termos do artigo» · «entende o tribunal» · «não assiste razão»') +
         col(1240, 600, '0.22', 'CENTROID', 'closeness to the average of the whole document: keeps the case context', '(not a phrase: a similarity score)') +
         box({ x: 0, y: 450, w: 900, h: 190, style: 'background:#d8eadd;border:4px solid #2f8a4c;border-radius:26px;padding:16px 26px' },
-          '<div style="font-size:26px;font-weight:700;color:#2f8a4c">DECISION</div><div style="font-size:28px;font-weight:700;color:' + INK + ';line-height:1.3;margin-top:6px">Bias towards the <i>fundamentação</i>: the judge\'s analysis of the case<br>Keeps the judges\' original wording</div>') +
+          '<div style="font-size:26px;font-weight:700;color:#2f8a4c">DECISION</div><div style="font-size:28px;font-weight:700;color:' + INK + ';line-height:1.3;margin-top:6px">Prioritises <i>fundamentação</i> phrases<br>Keeps the judges\' original wording</div>') +
         box({ x: 940, y: 450, w: 900, h: 190, style: 'background:#fbe3df;border:4px solid #a8322a;border-radius:26px;padding:16px 26px' },
           '<div style="font-size:26px;font-weight:700;color:#a8322a">TRADE-OFF</div><div style="font-size:28px;font-weight:700;color:' + INK + ';line-height:1.3;margin-top:6px">Possible information loss<br>Weights set by hand<br>Not expert-validated</div>');
-      return box({ x: 0, y: 0, w: 1920, h: 760, cl: '0-0:on', cls: 'only' }, s0) +
-        box({ x: 40, y: 20, w: 1840, h: 700, at: 1, cl: '1-1:on', cls: 'only' }, s1);
-    }
+      if (zoom) return box({ x: 40, y: 20, w: 1840, h: 700 }, s1);
+      return s0;
+  }
+
+  slides.push({
+    id: 'v2-summ-zoom', number: null, title: 'Smart Summarization: the score', layout: 'custom',
+    steps: [{ cue: 'Only if asked: the score' }],
+    notes: '',
+    sources: [],
+    footnote: 'Dissertation · §4.5.2 (architecture) · §4.5.4 (limitations and trade-offs)',
+    html: function () { return summHtml(true); }
   });
 
   /* ---- WHAT 2: why BERT collapsed ---- */
   slides.push({
     id: 'v2-collapse', number: 10, title: 'Why BERT Collapsed', layout: 'custom',
-    steps: [{ cue: 'Possible causes, class encodings, one class predicted' }],
-    notes: [
-      "DV: MCC 0.000 on train, validation and test; it said KEPT for everything, even the 435 ALTERED training cases.",
-      "BoC: MCC 0.303 train, 0.184 validation, 0.000 test; PARTIAL never predicted.",
-      "Possible causes (consistent with, NOT tested): few data, manual tuning without search, sliding window + mean pooling, heavy regularisation.",
-      "Class encodings (code): DV 0 = KEPT, 1 = ALTERED (positive class); BoC 0 = UNFAVORABLE, 1 = PARTIAL, 2 = FAVORABLE.",
-      "A model that always predicts one class has MCC 0: no information beyond the majority class.",
-      "Scale and methods also differ from the literature (backup)."
-    ],
+    steps: [{ cue: 'Intuition, action, result, lesson' }],
+    notes: '',
     sources: [],
-    footnote: 'Dissertation · §5.1.2 and §5.1.3 (train, validation and gold-test performance) · §6.1.1 · encodings: label mappings in the code (features.py)',
+    footnote: 'Dissertation · §4.3.4 (hyperparameters) · §5.1.2 and §5.1.3 (train, validation and test performance) · §6.1.1',
     html: function () {
-      var lb = '';
-      lb += box({ x: 80, y: 30, w: 1760, h: 56, style: 'font-size:38px;font-weight:700;color:' + SLATE }, 'What I think contributed');
-      var cs = ['Few data<br><span style="font-weight:500;font-size:28px">≈ 1–2k cases</span>', 'Manual tuning<br><span style="font-weight:500;font-size:28px">no search</span>', 'Sliding window<br><span style="font-weight:500;font-size:28px">+ mean pooling</span>', 'Heavy<br>regularisation'];
-      cs.forEach(function (t, i) { lb += chip(80 + i * 450, 110, 400, 170, '#f6e0d6', MAROON, t, 36, 'border:3px solid ' + MAROON + ';border-radius:30px'); });
-      lb += svg(arrow(960, 292, 960, 392, { w: 12 })) + chip(330, 410, 1260, 130, MAROON, '#fff', 'possible underfitting', 56);
+      var lb = box({ x: 80, y: 20, w: 1760, h: 56, style: 'font-size:38px;font-weight:700;color:' + SLATE }, 'My most likely explanation');
+      var cs = [['Intuition', 'little data:<br>risk of overfitting', '#f6e0d6', MAROON], ['Action, by hand', 'strong<br>regularisation', '#f6e0d6', MAROON], ['Result', 'underfitting', MAROON, '#fff']];
+      cs.forEach(function (c, i) {
+        lb += box({ x: 80 + i * 620, y: 120, w: 520, h: 240, style: 'background:' + c[2] + ';border:4px solid ' + MAROON + ';border-radius:30px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:10px 20px;color:' + c[3] },
+          '<div style="font-size:28px;font-weight:600">' + c[0] + '</div><div style="font-size:' + (i === 2 ? 52 : 36) + 'px;font-weight:700;margin-top:14px;line-height:1.2">' + c[1] + '</div>');
+      });
+      lb += svg(arrow(612, 240, 688, 240, { w: 10 }) + arrow(1232, 240, 1308, 240, { w: 10 }));
+      lb += chip(200, 400, 1520, 100, '#fff', SLATE, '<div><b>Evidence (example):</b> DV MCC 0.000 even on its own training data</div>', 36, 'border:4px solid ' + SLATE + ';border-radius:30px');
+      lb += chip(200, 530, 1520, 120, '#d8eadd', INK, '<div><b>Lesson:</b> first check (if) the model learns the training data</div>', 38, 'border:4px solid #2f8a4c;border-radius:30px');
       return lb;
     }
   });
@@ -1543,13 +1334,7 @@
   slides.push({
     id: 'v2-fewshot', number: 11, title: 'The Few-Shot Paradox', layout: 'custom',
     steps: [{ cue: 'Zero-shot to few-shot: mostly worse' }],
-    notes: [
-      "I hypothesised that examples would help. They mostly did not.",
-      "DV: MCC 0.592 to 0.486, Macro-F1 0.783 to 0.696.",
-      "BoC: MCC rose slightly, 0.468 to 0.523, but Macro-F1 fell, 0.663 to 0.631.",
-      "Consistent with one example per class being a thin, high-variance anchor, and with good examples being hard to pick (how many, and which). NOT tested.",
-      "Limited to k = 1 per class because of the hardware (manuscript 6.1.3)."
-    ],
+    notes: '',
     sources: [],
     footnote: 'Dissertation · §6.1.3 (few-shot paradox) · §5.2.2 (few-shot, k = 1) · Table 5.11',
     html: function () {
@@ -1573,27 +1358,25 @@
     }
   });
 
-  /* ---- WHAT 3: SHAP, the football analogy, one slide ---- */
+  /* ---- WHAT 3: SHAP on one real case ---- */
   slides.push({
     id: 'v2-shap', number: 11, title: 'SHAP on a Collapsed BERT', layout: 'custom',
-    steps: [{ cue: 'Football analogy' }],
-    notes: [
-      "Analogy: after a match, SHAP tells how much each player contributed compared with the average player. Players = sentences; result = prediction; average player = model output when the text is masked.",
-      "The BERT said KEPT in 5 of 5 DV cases (one was actually ALTERED) and UNFAVORABLE in 5 of 5 BoC cases: the scoreboard says HOME WIN whoever plays.",
-      "Only if asked (DV example, case 65/24.0GEBRG.G1): masked text 48.9% KEPT; all 367 sentences together +34.8 points = 83.6% (356 push up, 11 down). The 8 strongest sentences add +2.65 together (strongest +0.57, median +0.08): negligible, mostly boilerplate. Backup A4 has the BoC example.",
-      "SHAP explains the model, not the world. Nothing to validate with the judges, so I did not ask them.",
-      "Backup A4: the BoC example."
-    ],
+    steps: [{ cue: 'One case: every sentence adds almost nothing' }],
+    notes: '',
     sources: [{ label: 'SHAP: Lundberg & Lee 2017 (arXiv:1705.07874)', url: URL.shap }, { label: 'Case 65/24.0GEBRG.G1 (jurisprudencia.csm.org.pt)', url: URL.shapCase }],
-    footnote: 'Dissertation · §4.6.1 (SHAP explanations for BERT) · Appendix: SHAP explanation examples (DV and BoC) · case ' + link(URL.shapCase, '65/24.0GEBRG.G1'),
+    footnote: 'Dissertation · §4.6.1 (SHAP explanations for BERT) · §6.2 (RQ2) · Appendix: SHAP explanation examples · case ' + link(URL.shapCase, '65/24.0GEBRG.G1'),
     html: function () {
-      function tile(x, big, small) {
-        return box({ x: x, y: 120, w: 560, h: 230, cls: 'tile', style: 'display:flex;flex-direction:column;justify-content:center' }, '<div class="big" style="font-size:44px">' + big + '</div><div class="small" style="font-size:30px">' + small + '</div>');
-      }
-      return box({ x: 80, y: 20, w: 1760, h: 70, style: 'font-size:38px;font-weight:700;color:' + SLATE }, 'Analogy: after a football match, SHAP says how much each player contributed') +
-        tile(80, 'PLAYERS', '= the sentences of the judgment') + tile(680, 'RESULT', '= the model\'s prediction') + tile(1280, 'AVERAGE PLAYER', '= the model\'s output with the text masked') +
-        box({ x: 80, y: 410, w: 1760, h: 190, cls: 'dbox', style: 'border-color:#a8322a;background:#f5d9d5;border-radius:30px;padding:12px 30px;font-size:46px;line-height:1.3;display:flex;align-items:center;justify-content:center;text-align:center' },
-          '<div>The scoreboard says <b>HOME WIN</b>, whoever plays &#9917;</div>');
+      var X0 = 160, PX = 16, scale = '';
+      for (var t = 0; t <= 100; t += 25) scale += '<line x1="' + (X0 + t * PX) + '" y1="176" x2="' + (X0 + t * PX) + '" y2="300" stroke="#d6dbe1" stroke-width="2"/><text x="' + (X0 + t * PX) + '" y="334" font-size="26" fill="#394c60" text-anchor="middle" font-family="Open Sans,Arial,sans-serif">' + t + '%</text>';
+      return box({ x: 80, y: 6, w: 1760, h: 90, style: 'font-size:30px;font-weight:600;color:' + SLATE + ';line-height:1.35' },
+          'One DV case: ' + link(URL.shapCase, '65/24.0GEBRG.G1') + ' · true KEPT · predicted KEPT<br>Scale: the model\'s probability (%) of <b>KEPT</b>') +
+        box({ x: X0, y: 190, w: Math.round(48.9 * PX), h: 90, style: 'background:#9aa0a6;border-radius:12px 0 0 12px;color:#fff;font-size:30px;font-weight:700;display:flex;align-items:center;justify-content:center' }, 'all text masked: 48.9%') +
+        box({ x: X0 + Math.round(48.9 * PX), y: 190, w: Math.round(34.8 * PX), h: 90, style: 'background:#c3542b;color:#fff;font-size:30px;font-weight:700;display:flex;align-items:center;justify-content:center' }, '+34.8 from 367 sentences') +
+        box({ x: X0 + Math.round(83.6 * PX), y: 190, w: Math.round(16.4 * PX), h: 90, style: 'background:#eceeef;border-radius:0 12px 12px 0;border:3px dashed #9aa0a6' }, '') +
+        svg(scale) +
+        chip(80, 380, 860, 140, '#fbd9cc', INK, '<div>Strongest sentence: <b>+0.57 points</b><br>median sentence: +0.08</div>', 36, 'border:4px solid #c3542b;border-radius:30px') +
+        chip(980, 380, 860, 140, '#f5d9d5', INK, '<div>No sentence drives the prediction<br><span style="font-weight:500;font-size:28px">mostly procedural boilerplate</span></div>', 36, 'border:4px solid #a8322a;border-radius:30px') +
+        chip(80, 560, 1760, 130, '#fff', SLATE, '<div><b>Not rated by judges:</b> time and resource limits, and attributions this small<br>and spread out give a judge nothing meaningful to assess</div>', 32, 'border:4px solid ' + SLATE + ';border-radius:30px');
     }
   });
 
@@ -1601,15 +1384,7 @@
   slides.push({
     id: 'v2-judges', number: 13, title: 'Judge Validation', layout: 'custom',
     steps: [{ cue: 'Counts and two judge comments' }],
-    notes: [
-      "Five judges checked my labels through the annotation app, 5 cases each: 25 annotations per domain (separate panels for DV and BoC). Agreed: DV 24/25, BoC 21/25.",
-      "BoC: 20/20 excluding one judge whose answers diverged (excluded a posteriori): report 21/25 as the main number.",
-      "Counts are too small for statistics; the comments matter more.",
-      "Middle card (J2 + J3, DV): both labelled KEPT (correct) but not confident: they disagree with the court's ruling itself (J3 would have granted the prosecutor's appeal and revoked the decision).",
-      "Right card (J1, BoC): both parties may appeal, and the court may rule favourably on one and unfavourably on the other: the 3-class scheme does not fit real decisions.",
-      "Message: judges can disagree with the ruling itself, so ground truth is debatable; unrealistic labels should be dropped in future work (my view).",
-      "Comments are in Portuguese, as in the original annotation dataset."
-    ],
+    notes: '',
     sources: [{ label: 'Case 87/25.3PGSXL-A.L1-5 (TRL, 2025)', url: URL.j87 }, { label: 'Case 1627/20.0T8PVZ.P1 (TRP, 2025)', url: URL.j1627 }],
     footnote: 'Dissertation · §5.3 (judge validation) and Table 5.15 (§5.4) · *BoC: 20/20 excluding one judge whose answers diverged (excluded a posteriori)',
     html: function () {
@@ -1623,32 +1398,28 @@
           quotes.map(function (q) { return '<div style="font-size:27px;line-height:1.3;font-style:italic;font-weight:600;color:' + INK + '">&laquo;' + q + '&raquo;</div>'; }).join('') +
           '<div style="margin-top:auto;font-size:21px;color:#5b5651">' + meta + '</div>');
       }
-      return box({ x: 80, y: 30, w: 520, h: 100, style: 'font-size:30px;font-weight:700;color:' + SLATE + ';display:flex;align-items:center;line-height:1.2' }, 'Judges agreed with my labels in:') +
-        cnt(140, 'DV', '24 / 25', DVC) + cnt(290, 'BoC', '21 / 25*', BOCC) +
+      return box({ x: 80, y: 30, w: 540, h: 110, style: 'font-size:28px;font-weight:700;color:' + SLATE + ';line-height:1.4' }, '5 gold-test cases per domain,<br>annotated by 5 judges') +
+        cnt(160, 'DV', '24 / 25', DVC) + cnt(310, 'BoC', '21 / 25*', BOCC) +
         card(640, 'J2 + J3 · DV', ['…a decisão do TRL errou na avaliação do quadro factológico apurado (o disponível) e na aplicação do direito (…)', '(…) concederia provimento ao recurso do MP e revogaria a decisão recorrida'], link(URL.j87, 'Case 87/25.3PGSXL-A.L1-5') + ' · both labelled KEPT, both not confident') +
         card(1230, 'J1 · BoC', ['(…) existe a possibilidade de ambas as partes interporem recurso e o Tribunal de Recurso pode decidir favoravelmente quanto ao recurso de uma das partes e desfavoravelmente quanto à outra'], link(URL.j1627, 'Case 1627/20.0T8PVZ.P1') + ' · on the 3-class label scheme') +
-        chip(80, 580, 1760, 150, '#fff', SLATE, '<span>Judges can disagree with the ruling itself, so the ground truth is debatable.<br><span style="font-weight:600;font-size:27px;color:#a8322a">Labels unrealistic for real decisions should be dropped in future work.</span></span>', 31, 'border:4px solid ' + SLATE + ';border-radius:30px');
+        chip(80, 580, 870, 150, '#fff', SLATE, '<div>Judges can disagree with the ruling itself</div>', 34, 'border:4px solid ' + SLATE + ';border-radius:30px') +
+        chip(970, 580, 870, 150, '#fff', SLATE, '<div>Labels unrealistic for real decisions</div>', 34, 'border:4px solid ' + SLATE + ';border-radius:30px');
     }
   });
 
   /* ---- WHAT 8: limitations, four words each ---- */
   slides.push({
-    id: 'v2-limits', number: 15, title: 'Limitations', layout: 'pillRows', tone: 'red', rowH: 118, gap: 16, badgeW: 380, fs: 36,
+    id: 'v2-limits', number: 15, title: 'Limitations', layout: 'pillRows', tone: 'red', rowH: 104, gap: 14, badgeW: 380, fs: 36,
     rows: [
+      { badge: 'FRAMING', cls: 'alt', html: 'Retrospective classification, not prediction before the ruling' },
       { badge: 'LABELS', html: 'Regex heuristics, not legal truth' },
       { badge: 'DATA', cls: 'alt', html: 'Small: 50 test cases per domain' },
       { badge: 'HARDWARE', html: 'One 6 GB GPU, no large tuning' },
       { badge: 'MODELS', cls: 'alt', html: 'One LLM family only' },
       { badge: 'EXPLANATIONS', html: 'Not validated by legal experts' }
     ],
-    steps: [{ cue: 'Five limitations' }],
-    notes: [
-      "Labels: regex rules on the ruling text, not a legal ground truth (checked by judges on 25 cases per domain).",
-      "Data: about 1,100 DV and 1,800 BoC cases; gold test sets of 50 per domain.",
-      "Hardware: a 6 GB consumer GPU throughout; no hyperparameter search.",
-      "Models: one LLM family, no cross-model comparison.",
-      "Explanations: SHAP and reasoning traces were never validated by legal experts at scale."
-    ],
+    steps: [{ cue: 'Six limitations' }],
+    notes: '',
     footnote: 'Dissertation · §6.5 (limitations of this study)', sources: []
   });
 
@@ -1663,14 +1434,7 @@
       { badge: 'FAIRNESS AUDIT', html: 'Before any real deployment' }
     ],
     steps: [{ cue: 'Five directions from the dissertation' }],
-    notes: [
-      "All five come from the dissertation's Future Work section (6.6).",
-      "Summaries: refine the algorithm, tune weights against annotations, try other chunk levels.",
-      "More LLMs: tests how much is specific to DeepSeek-R1-8B.",
-      "Agentic use: models interacting with the existing institutional workflows, not a static single-purpose system.",
-      "XAI: well-grounded techniques with a legal-expert-friendly interface (like the judge annotation tool).",
-      "Fairness and responsibility audit is a prerequisite for any real deployment."
-    ],
+    notes: '',
     footnote: 'Dissertation · §6.6 (future work) · §6.4 (where AI can and cannot help in judicial decision-making)', sources: []
   });
 

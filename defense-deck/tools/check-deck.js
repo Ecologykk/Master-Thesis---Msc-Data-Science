@@ -32,7 +32,7 @@ const strip = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(
 const main = DECK.slides.filter(s => !s.appendix), appx = DECK.slides.filter(s => s.appendix);
 console.log(`Slides: ${main.length} main + ${appx.length} appendix`);
 if (main.length !== 20) err(`expected 20 main slides (short deck), found ${main.length}`);
-if (appx.length !== 29) err(`expected 29 backup slides (4 original + 25 moved), found ${appx.length}`);
+if (appx.length !== 30) err(`expected 30 backup slides (4 original + 26 moved), found ${appx.length}`);
 if (DECK.slides.slice(0, main.length).some(s => s.appendix)) err('appendix slides must come after all main slides');
 
 const ids = new Set();
